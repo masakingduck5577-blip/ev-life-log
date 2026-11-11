@@ -1,0 +1,14 @@
+:root {
+  --font-sans: 'Hiragino Sans', 'Noto Sans JP', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Hiragino Sans', 'Zen Kaku Gothic New', 'Noto Sans JP', system-ui, sans-serif;
+  color-scheme: light;
+}
+
+body {
+  background: #f2f5f9;
+}
+
+:focus-visible {
+  outline: 3px solid #1f6feb;
+  outline-offset: 2px;
+}
