@@ -52,7 +52,7 @@ export default function NotificationPermissionScreen() {
         )
       }>
       <ThemedText type="note" color="sub">
-        3 / 3
+        4 / 4
       </ThemedText>
 
       {IS_WEB ? (

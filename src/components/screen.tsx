@@ -2,7 +2,11 @@ import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Colors, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { router } from 'expo-router';
+
+import { Colors, MaxContentWidth, MinTouch, Radius, Spacing } from '@/constants/theme';
+
+import { Icon } from './icon';
 
 import { ThemedText } from './themed-text';
 
@@ -11,19 +15,33 @@ type ScreenProps = {
   lead?: string;
   /** 見出しを押したとき（開発用の設定を開く隠し操作に使う） */
   onTitlePress?: () => void;
+  /** 左上に「戻る」を出す */
+  back?: boolean;
   /** 画面の下に固定するもの（「次へ」ボタンなど） */
   footer?: ReactNode;
   children?: ReactNode;
 };
 
 /** 画面の共通の枠：見出し・説明・中身（縦にスクロール） */
-export function Screen({ title, lead, onTitlePress, footer, children }: ScreenProps) {
+export function Screen({ title, lead, onTitlePress, back, footer, children }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const heading = <ThemedText type="title">{title}</ThemedText>;
   return (
     <View style={[styles.safe, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.inner}>
+          {back ? (
+            <Pressable
+              role="button"
+              aria-label="戻る"
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+              style={({ pressed }) => [styles.back, pressed && { opacity: 0.7 }]}>
+              <Icon sf="chevron.left" md="chevron_left" size={22} color={Colors.ev} />
+              <ThemedText color="ev" style={{ fontWeight: 700 }}>
+                戻る
+              </ThemedText>
+            </Pressable>
+          ) : null}
           <View style={styles.header}>
             {onTitlePress ? (
               <Pressable onPress={onTitlePress} accessible={false}>
@@ -92,6 +110,15 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
     gap: Spacing.three,
+  },
+  back: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    minHeight: MinTouch,
+    paddingRight: Spacing.three,
+    marginTop: -Spacing.three,
+    marginLeft: -Spacing.one,
   },
   header: {
     gap: Spacing.two,

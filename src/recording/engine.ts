@@ -8,6 +8,9 @@ import {
   type PlaybackSpeed,
   type SimClock,
 } from '@/lib/clock';
+import type { Answers, ChargeAnswer } from '@/analysis/analyze';
+import type { HomeEnv } from '@/analysis/ev';
+import { DEFAULT_EV, PARAMS } from '@/data/simulator';
 import { jstDayNumber, jstMidnight } from '@/lib/format';
 import { createReplaySource, type ReplaySource } from '@/location/replay';
 import { createDeviceSource, type LocationPoint, type LocationSource } from '@/location/source';
@@ -27,6 +30,29 @@ import { DEFAULT_SCENARIO, getScenario, type ScenarioId } from './scenarios';
 export type RecordingMode = 'device' | 'test';
 /** どの車で記録するか（はじめに の画面で選ぶ） */
 export type CarType = 'gas' | 'loanerEv' | 'ownEv';
+
+/** 初期設定（はじめての画面・E1） */
+export type UserSettings = {
+  /** 検討中のEV（EVに乗っている人は、乗っているEV） */
+  evKey: string;
+  /** 今の車の燃費（km/L）。null は「分からない」（比べるガソリン車のカタログ値） */
+  gasKmPerL: number | null;
+  homeEnv: HomeEnv;
+  /** 家の電気料金：ふつう／夜が安い／単価を入れる */
+  elecPlan: 'normal' | 'night' | 'custom';
+  elecPrice: number;
+  /** 外で使う充電サービス */
+  publicService: 'hondaCharge' | 'emp' | 'dealerFree' | 'none';
+};
+
+export const DEFAULT_SETTINGS: UserSettings = {
+  evKey: DEFAULT_EV,
+  gasKmPerL: null,
+  homeEnv: 'have',
+  elecPlan: 'normal',
+  elecPrice: PARAMS.homeKwhPrice,
+  publicService: 'none',
+};
 
 export const RECORDING_DAYS = 7;
 /** テストデータの「最初から」「○日目へ」で始める時刻（朝6時） */
@@ -51,6 +77,9 @@ export type RecordingSnapshot = {
   lastPoint: LocationPoint | null;
   /** 1日目〜7日目の点の数 */
   dayCounts: number[];
+  settings: UserSettings;
+  /** 本人の答え（家の確認・電車かバスか・充電したか）。データの組ごと */
+  answers: Answers;
   error: string | null;
 };
 
@@ -62,6 +91,8 @@ const KEYS = {
   testClock: 'test.clock',
   deviceStartedAt: 'device.startedAt',
   deviceStoppedAt: 'device.stoppedAt',
+  settings: 'user.settings',
+  answers: (dataset: string) => `answers.${dataset}`,
 } as const;
 
 type SavedTestClock = { scenarioId: ScenarioId; simTime: number; speed: PlaybackSpeed };
@@ -102,8 +133,13 @@ class RecordingEngine {
     pointCount: 0,
     lastPoint: null,
     dayCounts: new Array(RECORDING_DAYS).fill(0),
+    settings: DEFAULT_SETTINGS,
+    answers: {},
     error: null,
   };
+  /** 受け取った点（分析に使う）。pointCount が変わったら読み直す */
+  private points: LocationPoint[] = [];
+  getPoints = () => this.points;
 
   private initPromise: Promise<void> | null = null;
   private source: LocationSource | null = null;
@@ -149,7 +185,8 @@ class RecordingEngine {
         ? 'test'
         : ((await s.getSetting<RecordingMode>(KEYS.mode)) ?? 'device');
       const scenarioId = (await s.getSetting<ScenarioId>(KEYS.scenario)) ?? DEFAULT_SCENARIO;
-      this.set({ onboarded, carType, mode, scenarioId });
+      const settings = { ...DEFAULT_SETTINGS, ...(await s.getSetting<Partial<UserSettings>>(KEYS.settings)) };
+      this.set({ onboarded, carType, mode, scenarioId, settings });
       await this.setUp();
       this.set({ ready: true });
     } catch (e) {
@@ -160,6 +197,17 @@ class RecordingEngine {
   private async setUp() {
     if (this.snapshot.mode === 'test') await this.setUpTest();
     else await this.setUpDevice();
+    await this.loadAnswers();
+  }
+
+  private async loadAnswers() {
+    const answers = (await this.store.getSetting<Answers>(KEYS.answers(this.dataset))) ?? {};
+    this.set({ answers });
+  }
+
+  private async saveAnswers(answers: Answers) {
+    this.set({ answers });
+    await this.store.setSetting(KEYS.answers(this.dataset), answers);
   }
 
   private async tearDown() {
@@ -174,6 +222,7 @@ class RecordingEngine {
     this.simClock?.dispose();
     this.simClock = null;
     this.data = [];
+    this.points = [];
   }
 
   /* ---------- テストデータ ---------- */
@@ -224,6 +273,7 @@ class RecordingEngine {
       await this.store.addPoints(dataset, upTo);
     }
     replay.resumeAfter(now);
+    this.points = upTo;
     this.set({
       pointCount: upTo.length,
       lastPoint: upTo.length ? upTo[upTo.length - 1] : null,
@@ -261,6 +311,7 @@ class RecordingEngine {
     this.unsubscribeClock = this.realClock.subscribe(() => void this.checkDeviceEnd());
 
     const points = await this.store.getPoints(DEVICE_DATASET);
+    this.points = points;
     this.set({
       clock: this.realClock,
       speed: 1,
@@ -288,6 +339,7 @@ class RecordingEngine {
     await this.store.clearPoints(DEVICE_DATASET);
     await this.store.setSetting(KEYS.deviceStartedAt, startedAt);
     await this.store.removeSetting(KEYS.deviceStoppedAt);
+    this.points = [];
     this.set({
       startedAt,
       endsAt: endOfRecording(startedAt),
@@ -307,6 +359,7 @@ class RecordingEngine {
   private async onPoints(batch: LocationPoint[], save: boolean) {
     // スマホの点は、バックグラウンドのタスクがすでに保存している
     if (save) await this.store.addPoints(this.dataset, batch);
+    this.points = this.points.concat(batch);
     const { startedAt, dayCounts, pointCount } = this.snapshot;
     const added = countByDay(batch, startedAt);
     this.set({
@@ -332,6 +385,7 @@ class RecordingEngine {
   async resetOnboarding() {
     await this.init();
     await this.store.setSetting(KEYS.onboarded, false);
+    await this.saveAnswers({});
     this.set({ onboarded: false });
     if (this.snapshot.mode === 'test') {
       this.simClock?.setRate(0);
@@ -341,6 +395,7 @@ class RecordingEngine {
       await this.store.removeSetting(KEYS.deviceStartedAt);
       await this.store.removeSetting(KEYS.deviceStoppedAt);
       await this.store.clearPoints(DEVICE_DATASET);
+      this.points = [];
       this.set({ startedAt: null, endsAt: null, stoppedAt: null, pointCount: 0, lastPoint: null, dayCounts: countByDay([], null) });
     }
   }
@@ -369,7 +424,46 @@ class RecordingEngine {
     await this.tearDown();
     await this.store.setSetting(KEYS.scenario, id);
     this.set({ scenarioId: id });
+    // シナリオに合わせて、家で充電できるか・どの車で記録するかを変える
+    await this.updateSettings({ homeEnv: scenario.homeEnv });
+    const { carType } = this.snapshot;
+    const nextCar: CarType = scenario.carType === 'ownEv' ? 'ownEv' : carType === 'ownEv' ? 'gas' : (carType ?? 'gas');
+    if (nextCar !== carType) {
+      await this.store.setSetting(KEYS.carType, nextCar);
+      this.set({ carType: nextCar });
+    }
     await this.setUpTest();
+    await this.loadAnswers();
+  }
+
+  /* ---------- 設定と答え ---------- */
+  async updateSettings(patch: Partial<UserSettings>) {
+    const settings = { ...this.snapshot.settings, ...patch };
+    this.set({ settings });
+    await this.store.setSetting(KEYS.settings, settings);
+  }
+
+  async setCarType(carType: CarType) {
+    await this.store.setSetting(KEYS.carType, carType);
+    this.set({ carType });
+  }
+
+  async answerTrip(tripId: string, value: 'car' | 'transit' | null) {
+    const trips = { ...this.snapshot.answers.trips };
+    if (value == null) delete trips[tripId];
+    else trips[tripId] = value;
+    await this.saveAnswers({ ...this.snapshot.answers, trips });
+  }
+
+  async answerCharge(stopId: string, value: ChargeAnswer | null) {
+    const charges = { ...this.snapshot.answers.charges };
+    if (value == null) delete charges[stopId];
+    else charges[stopId] = value;
+    await this.saveAnswers({ ...this.snapshot.answers, charges });
+  }
+
+  async answerHome(confirmed: boolean | null) {
+    await this.saveAnswers({ ...this.snapshot.answers, homeConfirmed: confirmed });
   }
 
   async setSpeed(speed: PlaybackSpeed) {

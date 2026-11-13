@@ -50,7 +50,7 @@ export default function LocationPermissionScreen() {
       lead="画面を閉じている間も、1週間の車での移動を記録するためです。"
       footer={footer}>
       <ThemedText type="note" color="sub">
-        2 / 3
+        3 / 4
       </ThemedText>
 
       {IS_WEB ? (

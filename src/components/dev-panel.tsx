@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BottomTabInset, Colors, MaxContentWidth, MinTouch, Radius, Spacing } from '@/constants/theme';
 import type { PlaybackSpeed } from '@/lib/clock';
-import { formatShortDate, formatTime } from '@/lib/format';
+import { DAY_MS } from '@/lib/clock';
+import { formatDate, formatShortDate, formatTime, jstMidnight } from '@/lib/format';
 import { RECORDING_DAYS } from '@/recording/engine';
 import {
   getProgress,
@@ -41,8 +42,9 @@ export function DevPanel() {
   if (!snapshot.ready || snapshot.mode !== 'test') return null;
   const progress = getProgress(snapshot, now);
   const scenario = getScenario(snapshot.scenarioId);
-  const dayLabel =
-    progress.status === 'finished' ? '記録の終わり' : progress.day ? `${progress.day}日目` : '';
+  const dayStarts = Array.from({ length: RECORDING_DAYS }, (_, i) =>
+    snapshot.startedAt != null ? jstMidnight(snapshot.startedAt) + i * DAY_MS : 0,
+  );
 
   return (
     <View
@@ -61,7 +63,7 @@ export function DevPanel() {
             テスト操作
           </ThemedText>
           <ThemedText type="note" color="sub" style={styles.headerTime} numberOfLines={1}>
-            {formatShortDate(now)} {formatTime(now)}・{dayLabel}
+            {progress.status === 'finished' ? '記録の終わり' : `${formatShortDate(now)} ${formatTime(now)}`}
           </ThemedText>
           <ThemedText type="note" color="ev" style={styles.toggle}>
             {open ? '閉じる' : '開く'}
@@ -83,7 +85,7 @@ export function DevPanel() {
               ))}
             </Row>
             <ThemedText type="note" color="sub" style={styles.hint}>
-              {scenario.title}（B〜Eは準備中）
+              {scenario.title}
             </ThemedText>
 
             <Row label="速さ">
@@ -97,14 +99,14 @@ export function DevPanel() {
               ))}
             </Row>
 
-            <Row label="○日目へ">
-              {Array.from({ length: RECORDING_DAYS }, (_, i) => i + 1).map((d) => (
+            <Row label="日付へ">
+              {dayStarts.map((ms, i) => (
                 <Chip
-                  key={d}
-                  label={String(d)}
-                  a11yLabel={`${d}日目の朝6時へ`}
-                  selected={progress.status === 'recording' && progress.day === d}
-                  onPress={() => void actions.jumpToDay(d)}
+                  key={ms}
+                  label={formatShortDate(ms).replace(/（.）/, '')}
+                  a11yLabel={`${formatDate(ms)}の朝6時へ`}
+                  selected={progress.status === 'recording' && progress.day === i + 1}
+                  onPress={() => void actions.jumpToDay(i + 1)}
                 />
               ))}
             </Row>

@@ -11,8 +11,9 @@ export type Scenario = {
   id: ScenarioId;
   title: string;
   description: string;
-  /** 家で充電できるか（結果の計算で使う予定） */
-  homeCharging: 'yes' | 'no';
+  /** このシナリオに合わせる設定（シナリオを選んだときに変える） */
+  homeEnv: 'have' | 'none';
+  carType: 'gas' | 'ownEv';
   /** 記録の始まり（日本時間 2026-11-16（月）0:00） */
   start: string;
   /** データがあるか。false はまだ準備中 */
@@ -27,7 +28,8 @@ export const SCENARIOS: Scenario[] = [
     id: 'A',
     title: '通勤＋買い物（家で充電できる）',
     description: '平日は車で通勤し、帰りにスーパーへ。土曜はバスと電車、日曜は車で買い物。',
-    homeCharging: 'yes',
+    homeEnv: 'have',
+    carType: 'gas',
     start: WEEK_START,
     available: true,
     load: () => require('../../assets/test/scenario-a.json') as LocationPoint[],
@@ -36,33 +38,41 @@ export const SCENARIOS: Scenario[] = [
     id: 'B',
     title: '同じ移動（家で充電できない）',
     description: 'Aと同じ移動で、家に充電設備がない場合。',
-    homeCharging: 'no',
+    homeEnv: 'none',
+    carType: 'gas',
     start: WEEK_START,
-    available: false,
+    available: true,
+    load: () => require('../../assets/test/scenario-a.json') as LocationPoint[],
   },
   {
     id: 'C',
-    title: '週末に遠出（日光・那須）',
-    description: '平日は通勤、週末に日光か那須へ車で出かける。',
-    homeCharging: 'yes',
+    title: '週末に遠出（日光）',
+    description: '平日は通勤、土曜に日光へ車で出かける（片道約50km）。日曜はバスと電車。',
+    homeEnv: 'have',
+    carType: 'gas',
     start: WEEK_START,
-    available: false,
+    available: true,
+    load: () => require('../../assets/test/scenario-c.json') as LocationPoint[],
   },
   {
     id: 'D',
     title: 'お迎えが多い',
-    description: '駅で10〜20分待つことが多い1週間。',
-    homeCharging: 'yes',
+    description: '夕方に駅へお迎え（車の中で10〜20分待つ）が週5回。水曜はバスで通勤。',
+    homeEnv: 'have',
+    carType: 'gas',
     start: WEEK_START,
-    available: false,
+    available: true,
+    load: () => require('../../assets/test/scenario-d.json') as LocationPoint[],
   },
   {
     id: 'E',
     title: 'EVに乗っている人',
-    description: '充電スポットに止まることがある1週間。',
-    homeCharging: 'yes',
+    description: '金曜の帰りに充電スポットで急速充電。ふだんは家で充電。土曜は電車。',
+    homeEnv: 'have',
+    carType: 'ownEv',
     start: WEEK_START,
-    available: false,
+    available: true,
+    load: () => require('../../assets/test/scenario-e.json') as LocationPoint[],
   },
 ];
 

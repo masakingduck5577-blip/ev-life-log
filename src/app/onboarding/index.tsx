@@ -38,11 +38,11 @@ export default function WelcomeScreen() {
       footer={
         <Button
           label="次へ"
-          onPress={() => router.push({ pathname: '/onboarding/location', params: { car } })}
+          onPress={() => router.push({ pathname: '/onboarding/setup', params: { car } })}
         />
       }>
       <ThemedText type="note" color="sub">
-        1 / 3
+        1 / 4
       </ThemedText>
       <View style={{ gap: Spacing.two }} role="radiogroup" aria-label="どの車で記録しますか">
         <ThemedText type="heading">どの車で記録しますか</ThemedText>

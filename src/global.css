@@ -12,3 +12,12 @@ body {
   outline: 3px solid #1f6feb;
   outline-offset: 2px;
 }
+
+/* 相談メモの印刷：帯・タブ・テスト操作は印刷しない */
+@media print {
+  [role='tablist'],
+  [role='status'],
+  [aria-label='テストデータの操作'] {
+    display: none !important;
+  }
+}
