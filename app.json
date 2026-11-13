@@ -9,7 +9,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "com.masaki.evlifelog",
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -33,7 +36,17 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "locationWhenInUsePermission": "車での移動を記録するために位置情報を使います。位置はスマホの中だけで計算し、外には送りません。",
+          "locationAlwaysAndWhenInUsePermission": "画面を閉じている間も1週間の車での移動を記録し、EVだった場合の結果を出すために使います。位置はスマホの中だけで計算し、外には送りません。"
+        }
+      ],
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,

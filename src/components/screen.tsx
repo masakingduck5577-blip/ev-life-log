@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 
@@ -9,23 +9,40 @@ import { ThemedText } from './themed-text';
 type ScreenProps = {
   title: string;
   lead?: string;
+  /** 見出しを押したとき（開発用の設定を開く隠し操作に使う） */
+  onTitlePress?: () => void;
+  /** 画面の下に固定するもの（「次へ」ボタンなど） */
+  footer?: ReactNode;
   children?: ReactNode;
 };
 
-/** タブの画面の共通の枠：見出し・説明・中身（縦にスクロール） */
-export function Screen({ title, lead, children }: ScreenProps) {
+/** 画面の共通の枠：見出し・説明・中身（縦にスクロール） */
+export function Screen({ title, lead, onTitlePress, footer, children }: ScreenProps) {
+  const insets = useSafeAreaInsets();
+  const heading = <ThemedText type="title">{title}</ThemedText>;
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <View style={[styles.safe, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.inner}>
           <View style={styles.header}>
-            <ThemedText type="title">{title}</ThemedText>
+            {onTitlePress ? (
+              <Pressable onPress={onTitlePress} accessible={false}>
+                {heading}
+              </Pressable>
+            ) : (
+              heading
+            )}
             {lead ? <ThemedText color="sub">{lead}</ThemedText> : null}
           </View>
           {children}
         </View>
       </ScrollView>
-    </SafeAreaView>
+      {footer ? (
+        <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.three }]}>
+          <View style={styles.footerInner}>{footer}</View>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -105,5 +122,18 @@ const styles = StyleSheet.create({
   },
   pillText: {
     fontWeight: 700,
+  },
+  footer: {
+    alignItems: 'center',
+    paddingTop: Spacing.three,
+    paddingHorizontal: Spacing.three,
+    backgroundColor: Colors.panel,
+    borderTopWidth: 1,
+    borderColor: Colors.line,
+  },
+  footerInner: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    gap: Spacing.two,
   },
 });

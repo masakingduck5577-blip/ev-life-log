@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 import { ThemedText } from '@/components/themed-text';
@@ -12,9 +12,10 @@ import { buildSimulatorUrl } from '@/lib/simulator';
 export default function SimulationScreen() {
   const [failed, setFailed] = useState(false);
   const uri = buildSimulatorUrl(SAMPLE_SIMULATOR_INPUT);
+  const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       {failed ? (
         <View style={styles.center}>
           <ThemedText type="heading">シミュレーターを開けませんでした</ThemedText>
@@ -34,7 +35,7 @@ export default function SimulationScreen() {
           onError={() => setFailed(true)}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
