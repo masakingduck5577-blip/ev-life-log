@@ -6,7 +6,7 @@ import { spotsNearRoute } from '@/analysis/analyze';
 import { HOME_CHARGE_KW } from '@/analysis/ev';
 import { Button } from '@/components/button';
 import { InfoBox } from '@/components/info-box';
-import { chargerKindLabel, chargerMarker, TRIP_LABEL } from '@/components/labels';
+import { chargerKindLabel, chargerMarker, isDriving, TRIP_LABEL } from '@/components/labels';
 import { StatRow, StatTile } from '@/components/link-row';
 import { RouteMap, type MapMarker } from '@/components/route-map';
 import { SocChart, sliceTrace } from '@/components/soc-chart';
@@ -16,7 +16,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Colors, MinTouch, Radius, Spacing } from '@/constants/theme';
 import { DAY_MS } from '@/lib/clock';
 import { formatDate, formatDuration, formatKm, formatTime, fromDateKey } from '@/lib/format';
-import { useRecording, useRecordingActions } from '@/recording/recording-context';
+import { getProgress, useNow, useRecording, useRecordingActions } from '@/recording/recording-context';
 import { useAnalysis } from '@/recording/use-analysis';
 
 /** 4. 1日の記録（/day?date=2026-11-18） */
@@ -24,7 +24,10 @@ export default function DayScreen() {
   const { date } = useLocalSearchParams<{ date: string }>();
   const dayStart = fromDateKey(String(date));
   const result = useAnalysis();
-  const { answers, carType, ready } = useRecording();
+  const snapshot = useRecording();
+  const { answers, carType, ready } = snapshot;
+  const now = useNow(snapshot.clock);
+  const recording = getProgress(snapshot, now).status === 'recording';
   const actions = useRecordingActions();
   const a = result?.analysis;
   const dayIndex = a?.days.findIndex((d) => d.dayStart === dayStart) ?? -1;
@@ -106,9 +109,9 @@ export default function DayScreen() {
             <View key={t.id} style={styles.trip}>
               <View style={styles.tripHead}>
                 <ThemedText style={styles.tripTime}>
-                  {formatTime(t.start)}〜{formatTime(t.end)}
+                  {formatTime(t.start)}〜{isDriving(t, now, recording) ? '' : formatTime(t.end)}
                 </ThemedText>
-                <ThemedText type="bold">{TRIP_LABEL[t.kind]}</ThemedText>
+                <ThemedText type="bold">{isDriving(t, now, recording) ? '運転中' : TRIP_LABEL[t.kind]}</ThemedText>
                 <ThemedText style={styles.tripKm}>{formatKm(t.distanceKm)}</ThemedText>
               </View>
               {t.guess !== 'car' ? (

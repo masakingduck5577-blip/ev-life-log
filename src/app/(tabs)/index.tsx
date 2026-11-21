@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { InfoBox } from '@/components/info-box';
-import { TRIP_LABEL } from '@/components/labels';
+import { isDriving, TRIP_LABEL } from '@/components/labels';
 import { StatRow, StatTile } from '@/components/link-row';
 import {
   BatterySection,
@@ -125,9 +125,9 @@ export default function RecordScreen() {
                 today.trips.map((t) => (
                   <View key={t.id} style={styles.tripRow}>
                     <ThemedText style={styles.tripTime}>
-                      {formatTime(t.start)}〜{formatTime(t.end)}
+                      {formatTime(t.start)}〜{isDriving(t, now, recording) ? '' : formatTime(t.end)}
                     </ThemedText>
-                    <ThemedText type="bold">{TRIP_LABEL[t.kind]}</ThemedText>
+                    <ThemedText type="bold">{isDriving(t, now, recording) ? '運転中' : TRIP_LABEL[t.kind]}</ThemedText>
                     <ThemedText style={styles.tripKm}>{formatKm(t.distanceKm)}</ThemedText>
                     {t.needsAnswer ? (
                       <ThemedText type="note" color="warn">
