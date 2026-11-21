@@ -66,6 +66,8 @@ const DAY_START_OFFSET = 6 * 60 * 60 * 1000;
 export type RecordingSnapshot = {
   ready: boolean;
   onboarded: boolean;
+  /** アプリを開いてから、はじめの画面と入力を通ったか（保存しない。開くたびに false から） */
+  entered: boolean;
   carType: CarType | null;
   mode: RecordingMode;
   /** スマホで「テストデータで試す」に切り替えられるか（Web は常にテストデータ） */
@@ -114,6 +116,7 @@ class RecordingEngine {
   private snapshot: RecordingSnapshot = {
     ready: false,
     onboarded: false,
+    entered: false,
     carType: null,
     mode: IS_WEB ? 'test' : 'device',
     canUseDevice: !IS_WEB,
@@ -354,7 +357,7 @@ class RecordingEngine {
     await this.init();
     await this.store.setSetting(KEYS.onboarded, true);
     await this.store.setSetting(KEYS.carType, carType);
-    this.set({ onboarded: true, carType });
+    this.set({ onboarded: true, entered: true, carType });
     if (this.snapshot.mode === 'test') await this.play();
     else if (this.snapshot.startedAt == null || this.snapshot.stoppedAt != null) {
       await this.startDeviceRecording();

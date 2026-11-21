@@ -19,6 +19,7 @@ import {
   requestLocationPermission,
   type LocationPermission,
 } from '@/location/source';
+import { useRecording } from '@/recording/recording-context';
 
 const IS_WEB = Platform.OS === 'web';
 
@@ -45,6 +46,7 @@ const STEPS: { sf: SFSymbol; md: AndroidSymbol; title: string; body: string }[] 
 
 /** 1. はじめに：アプリの説明・記録のしかた・許可 */
 export default function WelcomeScreen() {
+  const { onboarded, startedAt, stoppedAt } = useRecording();
   const [location, setLocation] = useState<LocationPermission | null>(null);
   const [notification, setNotification] = useState<NotificationPermission | null>(null);
 
@@ -77,6 +79,11 @@ export default function WelcomeScreen() {
           </ThemedText>
         </>
       }>
+      {onboarded && startedAt != null && stoppedAt == null ? (
+        <InfoBox tone="ok" title="記録は続いています">
+          「はじめる」から設定を確かめて、記録へ進めます。記録は消えません。
+        </InfoBox>
+      ) : null}
       <Section title="このアプリでわかること">
         <ThemedText>・ガソリン車の人：EVだったら、充電の心配はないか、費用はどう変わるか</ThemedText>
         <ThemedText>・EVに乗っている人：ふだんの充電代はいくらか</ThemedText>

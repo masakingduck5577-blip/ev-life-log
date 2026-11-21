@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 
 import { Button, Choice } from '@/components/button';
 import { CityPicker } from '@/components/city-picker';
@@ -33,10 +33,15 @@ const CAR_TYPES: { value: CarType; title: string; description: string }[] = [
 export default function SetupScreen() {
   const { trial } = useLocalSearchParams<{ trial?: string }>();
   const isTrial = trial === '1';
-  const { settings, carType: savedCar } = useRecording();
+  const { settings, carType: savedCar, startedAt, stoppedAt, mode } = useRecording();
   const actions = useRecordingActions();
-  const [car, setCar] = useState<CarType>(savedCar ?? 'gas');
+  // 選んでいなければ、今の設定の車の種類を出す
+  const [picked, setCar] = useState<CarType | null>(null);
+  const car: CarType = picked ?? savedCar ?? 'gas';
   const [busy, setBusy] = useState(false);
+  // すでにスマホで記録している（ブラウザはテストデータを続ける）なら、記録を消さずに記録タブへ
+  const continuing =
+    savedCar != null && startedAt != null && stoppedAt == null && (Platform.OS === 'web' || mode === 'device');
 
   const start = async () => {
     setBusy(true);
@@ -56,7 +61,11 @@ export default function SetupScreen() {
       lead="計算に使います。分からないところはそのままで始められ、あとから設定で変えられます。"
       back
       footer={
-        <Button label={isTrial ? 'テストデータで試す' : '記録を始める'} disabled={busy} onPress={() => void start()} />
+        <Button
+          label={isTrial ? 'テストデータで試す' : continuing ? '記録へ' : '記録を始める'}
+          disabled={busy}
+          onPress={() => void start()}
+        />
       }>
       <View style={{ gap: Spacing.two }} role="radiogroup" aria-label="今乗っている車">
         <ThemedText type="heading">今乗っている車</ThemedText>
