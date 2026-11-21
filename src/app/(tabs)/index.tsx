@@ -17,7 +17,6 @@ import {
 import { RouteMap } from '@/components/route-map';
 import { Screen, Section } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { TripQuestion } from '@/components/trip-question';
 import { Colors, MinTouch, Radius, Spacing } from '@/constants/theme';
 import { dateKey, formatDate, formatKm, formatShortDate, formatTime, jstDayNumber } from '@/lib/format';
 import { getProgress, useNow, useRecording, useRecordingActions } from '@/recording/recording-context';
@@ -74,17 +73,6 @@ export default function RecordScreen() {
           )}
 
           {/* 本人に確かめること（結果に関わる） */}
-          {/* 1件ずつ地図で見せて、その場で答えてもらう。答えると次の1件が出る */}
-          {a && a.needsAnswer.length > 0 ? (
-            <Section title={`確かめてほしい移動（${a.needsAnswer.length}件）`} icon={{ sf: 'questionmark.circle', md: 'help' }}>
-              <TripQuestion
-                trip={a.needsAnswer[0]}
-                answered={undefined}
-                showMap
-                onAnswer={(v) => void actions.answerTrip(a.needsAnswer[0].id, v)}
-              />
-            </Section>
-          ) : null}
           {a?.home && answers.homeConfirmed == null ? (
             <Section title="家はここですか？" icon={{ sf: 'house', md: 'home' }} description="夜に長くいた場所を、家と考えました。家に止めていた時間で、家での充電を計算します。">
               <RouteMap
@@ -129,11 +117,6 @@ export default function RecordScreen() {
                     </ThemedText>
                     <ThemedText type="bold">{isDriving(t, now, recording) ? '運転中' : TRIP_LABEL[t.kind]}</ThemedText>
                     <ThemedText style={styles.tripKm}>{formatKm(t.distanceKm)}</ThemedText>
-                    {t.needsAnswer ? (
-                      <ThemedText type="note" color="warn">
-                        確認
-                      </ThemedText>
-                    ) : null}
                   </View>
                 ))
               )}
@@ -148,7 +131,7 @@ export default function RecordScreen() {
                 .reverse()
                 .map(({ d, battery }) => {
                   const isToday = recording && jstDayNumber(d.dayStart) === jstDayNumber(now);
-                  const ask = d.trips.some((t) => t.needsAnswer);
+                  const notCar = d.trips.filter((t) => t.kind !== 'car').length;
                   return (
                     <Pressable
                       key={d.dayStart}
@@ -169,9 +152,9 @@ export default function RecordScreen() {
                           </ThemedText>
                         ) : null}
                       </View>
-                      {ask ? (
-                        <ThemedText type="note" color="warn">
-                          確認
+                      {notCar ? (
+                        <ThemedText type="note" color="sub">
+                          車以外 {notCar}
                         </ThemedText>
                       ) : null}
                       <Icon sf="chevron.right" md="chevron_right" size={18} color={Colors.sub} />

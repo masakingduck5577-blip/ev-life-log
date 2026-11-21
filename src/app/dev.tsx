@@ -4,9 +4,12 @@ import { Platform, View } from 'react-native';
 import { Button, Choice } from '@/components/button';
 import { InfoBox } from '@/components/info-box';
 import { Screen, Section } from '@/components/screen';
-import { Spacing } from '@/constants/theme';
+import { ThemedText } from '@/components/themed-text';
+import { Colors, Spacing } from '@/constants/theme';
+import { formatDuration, formatKm, formatShortDate, formatTime } from '@/lib/format';
 import { useRecording, useRecordingActions } from '@/recording/recording-context';
 import { SCENARIOS } from '@/recording/scenarios';
+import { useAnalysis } from '@/recording/use-analysis';
 
 const IS_WEB = Platform.OS === 'web';
 
@@ -15,8 +18,11 @@ const IS_WEB = Platform.OS === 'web';
  * 開発用ビルドでは記録タブのボタンから、デモ用のビルドでは「記録」の見出しを5回押すと開く。
  */
 export default function DevSettingsScreen() {
-  const { mode, scenarioId } = useRecording();
+  const { mode, scenarioId, answers } = useRecording();
   const actions = useRecordingActions();
+  const result = useAnalysis();
+  const trips = result?.analysis.trips ?? [];
+  const excluded = trips.filter((t) => t.guess !== 'car');
 
   return (
     <Screen
@@ -61,6 +67,29 @@ export default function DevSettingsScreen() {
           </View>
         </Section>
       ) : null}
+
+      {/* 動作確認（バスや電車に乗って確かめるとき用）：車ではないと判断した移動と、その理由 */}
+      <Section title={`動作確認：車ではないと判断した移動（${excluded.length}件）`}>
+        <ThemedText type="note" color="sub">
+          見つけた移動 {trips.length}件のうち、車 {trips.length - excluded.length}件。
+        </ThemedText>
+        {excluded.map((t) => (
+          <View key={t.id} style={{ gap: Spacing.half, paddingVertical: Spacing.two, borderBottomWidth: 1, borderColor: Colors.line }}>
+            <ThemedText type="bold">
+              {formatShortDate(t.start)} {formatTime(t.start)}〜{formatTime(t.end)}・{formatKm(t.distanceKm)}・最高 時速{Math.round(t.maxSpeedKmh)}km
+            </ThemedText>
+            <ThemedText>
+              {t.reason ?? '（理由なし）'}
+              {answers.trips?.[t.id] === 'car' ? '（本人が「車だった」に直した）' : ''}
+            </ThemedText>
+            {t.waitMin > 0 ? (
+              <ThemedText type="note" color="sub">
+                止まって待っていた時間 {formatDuration(t.waitMin)}
+              </ThemedText>
+            ) : null}
+          </View>
+        ))}
+      </Section>
 
       <Section title="はじめからやり直す" description="「はじめに」の画面に戻ります。今の記録は消えます。">
         <Button

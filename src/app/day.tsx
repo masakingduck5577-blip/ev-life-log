@@ -10,7 +10,7 @@ import { chargerKindLabel, chargerMarker, isDriving, TRIP_LABEL } from '@/compon
 import { StatRow, StatTile } from '@/components/link-row';
 import { RouteMap, type MapMarker } from '@/components/route-map';
 import { SocChart, sliceTrace } from '@/components/soc-chart';
-import { TripQuestion } from '@/components/trip-question';
+import { TripOverride } from '@/components/trip-override';
 import { Screen, Section } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, MinTouch, Radius, Spacing } from '@/constants/theme';
@@ -63,7 +63,7 @@ export default function DayScreen() {
         markers={markers}
       />
       <ThemedText type="note" color="sub">
-        青い線：車／灰色の点線：電車・バス。印：家・急（急速）・普（普通）・H（Honda Charge）
+        青い線：車／灰色の点線：車ではない移動。印：家・急（急速）・普（普通）・H（Honda Charge）
       </ThemedText>
 
       <StatRow>
@@ -115,7 +115,7 @@ export default function DayScreen() {
                 <ThemedText style={styles.tripKm}>{formatKm(t.distanceKm)}</ThemedText>
               </View>
               {t.guess !== 'car' ? (
-                <TripQuestion trip={t} answered={answered} onAnswer={(v) => void actions.answerTrip(t.id, v)} />
+                <TripOverride trip={t} corrected={answered === 'car'} onChange={(v) => void actions.answerTrip(t.id, v)} />
               ) : null}
             </View>
           );

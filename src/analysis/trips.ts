@@ -6,6 +6,9 @@
  * - 時速15km以上の点から始まり、時速15km以上の点が15分来なくなるまでを1回の運転とする。
  *   途中で止まっていた時間（信号・渋滞・短い用事）も、その運転に含める
  * - 運転の中で同じ場所に5分以上いたところを「止まって待っていた時間」として数える
+ * - 車ではない移動（運転が終わったあと、記録した点の列で判断する）
+ *   自転車など：時速40km以上が30秒以上続かなかった運転は、車ではないとする
+ * - 車ではないと判断した移動は計算に入れず、理由を出す。本人が「車だった」に直せる
  */
 
 import type { LocationPoint } from '@/location/source';
@@ -29,6 +32,10 @@ const WAIT_RADIUS_M = 100;
 const MAX_ACCURACY_M = 50;
 /** これより短い移動は数えない（m）。位置のぶれで生まれる見かけの移動を除くため */
 const MIN_TRIP_M = 500;
+/** 車とみなす速さ：時速40km以上（自転車ではまず続けて出ない速さ） */
+const CAR_PROOF_SPEED = 40 / 3.6;
+/** その速さが続く時間：30秒以上（下り坂の自転車や、位置のぶれの一瞬を除くため） */
+const SUSTAIN_MS = 30 * 1000;
 
 /** 家の推定で「動いている点」を除くための速さ（m/s） */
 export const CAR_MIN_SPEED = DRIVE_SPEED;
@@ -182,10 +189,34 @@ export function detectTrips(
   const track = toTrack(allPoints);
   const trips: Trip[] = [];
   for (const [s, e] of findDriveRanges(track)) {
-    const trip = makeTrip(track, s, e, 'car', null, answers);
+    // 自転車など：時速40km以上が30秒以上続かなかった運転は、車ではない
+    const isCar = sustained(track, s, e, CAR_PROOF_SPEED, SUSTAIN_MS);
+    const trip = isCar
+      ? makeTrip(track, s, e, 'car', null, answers)
+      : makeTrip(track, s, e, 'other', `車ではないと判断しました（最高 時速${Math.round(maxSpeedKmh(track, s, e))}km）`, answers);
     if (trip) trips.push(trip);
   }
   return trips;
+}
+
+/** 点の番号 s〜e の中で、speed 以上が続けて ms 以上あったか */
+export function sustained(track: Track, s: number, e: number, speed: number, ms: number): boolean {
+  let runStart = -1;
+  for (let k = s; k <= e; k++) {
+    if (track.sp[k] >= speed) {
+      if (runStart < 0) runStart = k;
+      if (track.ms[k] - track.ms[runStart] >= ms) return true;
+    } else {
+      runStart = -1;
+    }
+  }
+  return false;
+}
+
+function maxSpeedKmh(track: Track, s: number, e: number): number {
+  let max = 0;
+  for (let k = s; k <= e; k++) max = Math.max(max, track.sp[k]);
+  return max * 3.6;
 }
 
 /** 点ごとの速さ（m/s）。スマホが速さを出さなかった点は、前の点との距離と時間から出す */
