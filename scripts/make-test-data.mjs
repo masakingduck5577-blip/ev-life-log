@@ -10,12 +10,13 @@
  * 決まった乱数（シード）を使うので、何度作っても同じデータになる。
  *
  * 注意
- * - 場所の名前はすべて架空。座標はおおよその位置で、道は手で決めた通過点を結んだだけ
- *   （実際の道路・線路に正確には沿わない。線路との重なりの判定を試すときは、OSM の線路と比べて直す）。
+ * - 場所の名前はすべて架空。車の道は手で決めた通過点を結んだだけで、実際の道路に正確には沿わない。
+ * - 電車・LRT・新幹線・高速道路は、assets/geo/ の OSM のデータ（© OpenStreetMap contributors, ODbL）の
+ *   線路と道路の上をたどって作る（線路との重なりの判定を試すため）。先に scripts/fetch-osm-geo.mjs を動かしておく。
  * - 家の点は、田畑の多いあたりに置いている。人の家に重なっていないか、地図で確かめてから使う。
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -85,6 +86,94 @@ function jitter(p, accuracy) {
   return [p[0] + dLat, p[1] + dLng];
 }
 
+/* ---------- OSM の線路・高速道路の上をたどる ---------- */
+const GEO = join(ROOT, 'assets', 'geo');
+const RAIL_DATA = JSON.parse(readFileSync(join(GEO, 'tochigi-rail.json'), 'utf8'));
+const MOTORWAY_DATA = JSON.parse(readFileSync(join(GEO, 'tochigi-motorway.json'), 'utf8'));
+const pairsOf = (c) => Array.from({ length: c.length / 2 }, (_, i) => [c[2 * i], c[2 * i + 1]]);
+
+/** 駅・停留場の位置（同じ名前がいくつかあれば最初のもの） */
+function station(name, type = 'station') {
+  const s = RAIL_DATA.stations.find((x) => x.n === name && x.t === type);
+  if (!s) throw new Error(`駅が見つかりません：${name}`);
+  return s.p;
+}
+
+/** 線の集まりの上で、from に近い点から to に近い点までの最短の道（ダイクストラ法） */
+function routeOn(lines, from, to) {
+  const id = (p) => `${p[0]},${p[1]}`;
+  const nodes = new Map();
+  const edges = new Map();
+  const add = (a, b) => {
+    const d = dist(a, b);
+    for (const [x, y] of [[a, b], [b, a]]) {
+      nodes.set(id(x), x);
+      if (!edges.has(id(x))) edges.set(id(x), []);
+      edges.get(id(x)).push([id(y), d]);
+    }
+  };
+  const segs = [];
+  for (const line of lines) {
+    const c = pairsOf(line.c);
+    for (let i = 1; i < c.length; i++) {
+      add(c[i - 1], c[i]);
+      segs.push([c[i - 1], c[i]]);
+    }
+  }
+  // 線を間引くと、分かれ道で線の端が別の線の途中に乗るだけになる。また、上りと下りの線路は離れてつながっていない。
+  // そこで、どの点も20m以内の別の線につなぐ（テストデータの道を作るためだけ）
+  for (const [key] of [...edges]) {
+    const p = nodes.get(key);
+    let best = null;
+    for (const [a, b] of segs) {
+      if (id(a) === key || id(b) === key) continue;
+      const q = project(p, a, b);
+      const d = dist(p, q);
+      if (d < 20 && (!best || d < best.d)) best = { d, q, a, b };
+    }
+    if (best) {
+      add(p, best.q);
+      add(best.q, best.a);
+      add(best.q, best.b);
+    }
+  }
+  const closest = (p) => [...nodes.values()].reduce((best, q) => (dist(p, q) < dist(p, best) ? q : best));
+  const start = id(closest(from));
+  const goal = id(closest(to));
+  const best = new Map([[start, 0]]);
+  const prev = new Map();
+  const open = new Set([start]);
+  while (open.size) {
+    let cur = null;
+    for (const n of open) if (cur == null || best.get(n) < best.get(cur)) cur = n;
+    open.delete(cur);
+    if (cur === goal) break;
+    for (const [next, d] of edges.get(cur) ?? []) {
+      const nd = best.get(cur) + d;
+      if (nd < (best.get(next) ?? Infinity)) {
+        best.set(next, nd);
+        prev.set(next, cur);
+        open.add(next);
+      }
+    }
+  }
+  if (!best.has(goal)) throw new Error('道がつながっていません');
+  const path = [];
+  for (let n = goal; n; n = prev.get(n)) path.unshift(nodes.get(n));
+  return path;
+}
+/** 点 p から線分 a-b にいちばん近い点 */
+function project(p, a, b) {
+  const k = Math.cos(rad(p[0]));
+  const ax = a[1] * k, ay = a[0], bx = b[1] * k, by = b[0], px = p[1] * k, py = p[0];
+  const dx = bx - ax, dy = by - ay;
+  const len = dx * dx + dy * dy;
+  const t = len === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len));
+  return [ay + t * dy, (ax + t * dx) / k];
+}
+const railRoute = (filter, from, to) => routeOn(RAIL_DATA.rails.filter(filter), from, to);
+const motorwayRoute = (name, from, to) => routeOn(MOTORWAY_DATA.motorways.filter((m) => m.n === name), from, to);
+
 /* ---------- 架空の場所（名前はすべて架空） ---------- */
 const PLACES = {
   home: { name: 'みどり台の家', at: [36.5902, 139.9848] },
@@ -93,9 +182,15 @@ const PLACES = {
   mall: { name: '東部ショッピングモール', at: [36.553, 139.9302] },
   busHome: { name: 'みどり台バス停', at: [36.5868, 139.9822] },
   busStation: { name: '駅東口バス停', at: [36.5596, 139.9012] },
-  stationA: { name: '中央駅（JR宇都宮線）', at: [36.559, 139.8984] },
-  stationB: { name: '南の駅（JR宇都宮線）', at: [36.4956, 139.874] },
-  cafe: { name: '南のカフェ', at: [36.4942, 139.8762] },
+  // 駅は OSM の位置（宇都宮駅・雀宮駅）
+  stationA: { name: '宇都宮駅（JR宇都宮線）', at: station('宇都宮') },
+  stationB: { name: '雀宮駅（JR宇都宮線）', at: station('雀宮') },
+  cafe: { name: '南のカフェ', at: [36.4925, 139.8785] },
+  // LRT の停留場と新幹線の駅（OSM の位置）
+  lrtHome: { name: 'ゆいの杜西（LRT）', at: station('ゆいの杜西', 'tram_stop') },
+  lrtStation: { name: '宇都宮駅東口（LRT）', at: station('宇都宮駅東口', 'tram_stop') },
+  oyama: { name: '小山駅（新幹線）', at: station('小山') },
+  oyamaCafe: { name: '小山のカフェ', at: [36.3138, 139.8037] },
   nikko: { name: '日光の観光駐車場', at: [36.748, 139.602] },
   // シナリオE：実在の公開の充電スポット（Web版シミュレーターの公式一覧にあるもの）
   charger: { name: 'ENEOS アニマート柳田SS（急速）', at: [36.569679, 139.961594] },
@@ -110,15 +205,20 @@ const ROAD_SUPER_TO_HOME = [PLACES.super.at, [36.5662, 139.9602], ...[...ROAD_HO
 const ROAD_HOME_TO_MALL = [...ROAD_HOME_TO_MAIN, [36.5641, 139.9451], [36.5575, 139.9365], PLACES.mall.at];
 const ROAD_HOME_TO_SUPER = [...ROAD_HOME_TO_MAIN, PLACES.super.at];
 const BUS_ROUTE = [PLACES.busHome.at, [36.5795, 139.9785], [36.5702, 139.9702], [36.5662, 139.9602], [36.5641, 139.9451], [36.5622, 139.9301], [36.5606, 139.9152], [36.5598, 139.9062], PLACES.busStation.at];
-// JR宇都宮線（中央駅 → 南の駅）。線路に正確には沿わない
-const RAIL = [PLACES.stationA.at, [36.5395, 139.892], [36.5198, 139.8852], [36.5052, 139.8795], PLACES.stationB.at];
+// JR宇都宮線（宇都宮駅 → 雀宮駅）：OSM の線路の上
+const RAIL = railRoute((r) => r.k === 'rail' && !r.hs && r.n.includes('東北本線'), PLACES.stationA.at, PLACES.stationB.at);
+// LRT（ゆいの杜西 → 宇都宮駅東口）：鬼怒通りの道路の上の区間を含む
+const LRT = railRoute((r) => r.k === 'tram', PLACES.lrtHome.at, PLACES.lrtStation.at);
+// 東北新幹線（宇都宮駅 → 小山駅）
+const SHINKANSEN = railRoute((r) => r.hs === 1, PLACES.stationA.at, PLACES.oyama.at);
 const rev = (p) => [...p].reverse();
 const ROAD_OFFICE_TO_CHARGER = [...rev(ROAD_MAIN_TO_OFFICE), [36.5675, 139.961], PLACES.charger.at];
 const ROAD_CHARGER_TO_HOME = [PLACES.charger.at, [36.5702, 139.9702], [36.5795, 139.9785], [36.5868, 139.9822], PLACES.home.at];
 const ROAD_HOME_TO_PICKUP = [...ROAD_HOME_TO_MAIN, ...ROAD_MAIN_TO_OFFICE.slice(1, -1), PLACES.busStation.at];
-// 日光へ：市の中心を通って北西へ。宇都宮IC〜日光IC は自動車専用道路（おおよその位置）
+// 日光へ：市の中心を通って北西へ。宇都宮IC〜日光IC は日光宇都宮道路（OSM の高速道路の上）
 const ROAD_HOME_TO_CITY = [...ROAD_HOME_TO_MAIN, [36.5641, 139.9451], [36.5622, 139.9301], [36.5606, 139.9152], [36.56, 139.9], [36.564, 139.88], [36.58, 139.865], [36.609, 139.835]];
-const ROAD_CITY_TO_NIKKO = [[36.609, 139.835], [36.65, 139.79], [36.69, 139.74], [36.715, 139.69], [36.735, 139.645], PLACES.nikko.at];
+const NIKKO_MOTORWAY = motorwayRoute('日光宇都宮道路', [36.609, 139.835], [36.735, 139.645]);
+const ROAD_CITY_TO_NIKKO = [[36.609, 139.835], ...NIKKO_MOTORWAY, PLACES.nikko.at];
 
 /* ---------- 点を作る ---------- */
 const out = [];
@@ -139,6 +239,10 @@ const MODES = {
   bus: { cruise: [9, 12], accel: 1, brake: 1.2, stopEvery: 450, stopProb: 0.85, stopWait: [15, 45], every: 5, everyStopped: 15, acc: [6, 12], activity: 'automotive' },
   carFast: { cruise: [20, 23], accel: 1.2, brake: 2, stopEvery: 4000, stopProb: 0.15, stopWait: [20, 60], every: 5, everyStopped: 15, acc: [5, 10], activity: 'automotive' },
   train: { cruise: [22, 27], accel: 0.7, brake: 0.8, stopEvery: Infinity, stopProb: 0, stopWait: [0, 0], every: 5, everyStopped: 15, acc: [8, 20], activity: 'automotive' },
+  // LRT：道路の上は時速40kmまで。停留場ごとに止まる
+  lrt: { cruise: [10, 11], accel: 0.9, brake: 1, stopEvery: 900, stopProb: 0.95, stopWait: [20, 40], every: 5, everyStopped: 15, acc: [6, 14], activity: 'automotive' },
+  // 新幹線：時速230〜260km
+  shinkansen: { cruise: [64, 72], accel: 0.6, brake: 0.8, stopEvery: Infinity, stopProb: 0, stopWait: [0, 0], every: 5, everyStopped: 15, acc: [8, 20], activity: 'automotive' },
 };
 
 /** 乗り物で道を進む。着いた時刻を返す */
@@ -285,6 +389,38 @@ function busAndTrain(day, t) {
   t = ride('bus', rev(BUS_ROUTE), t);
   return walk([PLACES.busHome.at, H], t);
 }
+/** LRT で宇都宮駅東口へ（家から停留場まで歩く。鬼怒通りの区間を通る） */
+function lrtTrip(day, t) {
+  t = stay(H, t, at(day, 10, 0));
+  t = walk([H, [36.578, 139.9862], PLACES.lrtHome.at], t);
+  t = stay(PLACES.lrtHome.at, t, t + between(4, 8) * MIN, false);
+  t = ride('lrt', LRT, t);
+  t = walk([PLACES.lrtStation.at, near(PLACES.lrtStation.at, 0.0012, 0.0015)], t);
+  t = stay(near(PLACES.lrtStation.at, 0.0012, 0.0015), t, at(day, 14, 0));
+  t = walk([near(PLACES.lrtStation.at, 0.0012, 0.0015), PLACES.lrtStation.at], t);
+  t = stay(PLACES.lrtStation.at, t, t + between(4, 8) * MIN, false);
+  t = ride('lrt', rev(LRT), t);
+  return walk([PLACES.lrtHome.at, [36.578, 139.9862], H], t);
+}
+/** バスで宇都宮駅へ行き、新幹線で小山へ */
+function shinkansenTrip(day, t) {
+  t = stay(H, t, at(day, 9, 30));
+  t = walk([H, PLACES.busHome.at], t);
+  t = stay(PLACES.busHome.at, t, t + between(3, 6) * MIN, false);
+  t = ride('bus', BUS_ROUTE, t);
+  t = walk([PLACES.busStation.at, [36.5594, 139.8998], PLACES.stationA.at], t);
+  t = stay(PLACES.stationA.at, t, t + between(8, 12) * MIN);
+  t = ride('shinkansen', SHINKANSEN, t);
+  t = walk([PLACES.oyama.at, PLACES.oyamaCafe.at], t);
+  t = stay(PLACES.oyamaCafe.at, t, at(day, 14, 0));
+  t = walk([PLACES.oyamaCafe.at, PLACES.oyama.at], t);
+  t = stay(PLACES.oyama.at, t, t + between(8, 12) * MIN);
+  t = ride('shinkansen', rev(SHINKANSEN), t);
+  t = walk([PLACES.stationA.at, [36.5594, 139.8998], PLACES.busStation.at], t);
+  t = stay(PLACES.busStation.at, t, t + between(5, 12) * MIN, false);
+  t = ride('bus', rev(BUS_ROUTE), t);
+  return walk([PLACES.busHome.at, H], t);
+}
 /** 日曜：車でショッピングモール、夕方にスーパー */
 function sundayShopping(day, t) {
   const M = PLACES.mall.at;
@@ -351,7 +487,7 @@ function scenarioC() {
   return finish(t);
 }
 
-/* ---------- シナリオD：お迎えが多い（週4回、駅で10〜20分待つ）。水曜はバスで通勤 ---------- */
+/* ---------- シナリオD：お迎えが多い（週4回、駅で10〜20分待つ）。水曜はバスで通勤、土曜の昼は LRT ---------- */
 function scenarioD() {
   let t = begin(20261118);
   for (let day = 1; day <= 5; day++) {
@@ -363,12 +499,13 @@ function scenarioD() {
     }
     if (day !== 4) t = pickup(day, t);
   }
+  t = lrtTrip(6, t);
   t = pickup(6, t);
   t = sundayShopping(7, t);
   return finish(t);
 }
 
-/* ---------- シナリオE：EVに乗っている人（金曜の帰りに充電スポットで急速充電）。土曜は電車 ---------- */
+/* ---------- シナリオE：EVに乗っている人（金曜の帰りに充電スポットで急速充電）。土曜は新幹線 ---------- */
 function scenarioE() {
   let t = begin(20261119);
   for (let day = 1; day <= 5; day++) {
@@ -376,7 +513,7 @@ function scenarioE() {
     if (day % 2 === 1) t = lunchWalk(day, t);
     t = eveningByCar(day, t, day === 5 ? 'charger' : day === 2 || day === 4 ? 'super' : null);
   }
-  t = busAndTrain(6, t);
+  t = shinkansenTrip(6, t);
   t = sundayShopping(7, t);
   return finish(t);
 }

@@ -6,7 +6,11 @@
  * - 時速15km以上の点から始まり、時速15km以上の点が15分来なくなるまでを1回の運転とする。
  *   途中で止まっていた時間（信号・渋滞・短い用事）も、その運転に含める
  * - 運転の中で同じ場所に5分以上いたところを「止まって待っていた時間」として数える
- * - 車ではない移動（運転が終わったあと、記録した点の列で判断する）
+ * - 車ではない移動（運転が終わったあと、記録した点の列で判断する）。順番は 電車・新幹線・LRT → 自転車など
+ *   電車：線路から30m以内の点が2km以上続いた区間を、電車として運転から切り出す（残りは車として残す）。
+ *         区間の始まりと終わりがどちらも駅から200m以内なら、電車の判断を確かなものとする
+ *   新幹線：時速150km以上が30秒以上続いた区間は電車（線路の上の区間ごと切り出す）
+ *   LRT：線路が道路の上を走る区間では、時速50km以上が30秒以上続いていれば車とする
  *   自転車など：時速40km以上が30秒以上続かなかった運転は、車ではないとする
  * - 車ではないと判断した移動は計算に入れず、理由を出す。本人が「車だった」に直せる
  */
@@ -14,6 +18,7 @@
 import type { LocationPoint } from '@/location/source';
 
 import { center, distanceM, thin, type LatLng } from './geo';
+import { motorwayDistanceM, nearestRail, nearestStation } from './rail';
 
 /* ---------- 決まりの値（理由） ---------- */
 /** 運転の始まりと続きを見る速さ：時速15km以上（歩きやゆっくりの自転車より速く、街中の運転は含む） */
@@ -36,6 +41,22 @@ const MIN_TRIP_M = 500;
 const CAR_PROOF_SPEED = 40 / 3.6;
 /** その速さが続く時間：30秒以上（下り坂の自転車や、位置のぶれの一瞬を除くため） */
 const SUSTAIN_MS = 30 * 1000;
+/** 線路の上とみなす距離（m）。GPS のぶれ（10〜20m）と、複線の幅を含む */
+const ON_RAIL_M = 30;
+/** 線路の上がこの距離以上続いたら電車（m）。踏切や、線路沿いの道を少し走っただけを除くため */
+const RAIL_RUN_M = 2000;
+/** 線路から外れた点がこの距離までなら、線路の上が続いているとみなす（m）。トンネルや駅で位置がぶれるため */
+const RAIL_GAP_M = 200;
+/** 駅で乗り降りしたとみなす距離（m）。駅の建物とホームの広さ */
+const STATION_M = 200;
+/** 新幹線：時速150km以上（車では出ない速さ） */
+const SHINKANSEN_SPEED = 150 / 3.6;
+/** LRT の道路の上の区間で、車とみなす速さ：時速50km以上（道路の上の LRT は時速40kmまで） */
+const LRT_CAR_SPEED = 50 / 3.6;
+/** 高速道路から30m以内の点は、線路の近くでも線路の上と数えない（高速道路と線路が並んで走る所で、車を電車にしないため） */
+const MOTORWAY_M = 30;
+/** 電車の区間どうしが、これより短い間で続いていれば1つにまとめる（トンネルなどで線路から外れた所） */
+const MERGE_GAP_MS = 3 * 60 * 1000;
 
 /** 家の推定で「動いている点」を除くための速さ（m/s） */
 export const CAR_MIN_SPEED = DRIVE_SPEED;
@@ -189,14 +210,135 @@ export function detectTrips(
   const track = toTrack(allPoints);
   const trips: Trip[] = [];
   for (const [s, e] of findDriveRanges(track)) {
-    // 自転車など：時速40km以上が30秒以上続かなかった運転は、車ではない
-    const isCar = sustained(track, s, e, CAR_PROOF_SPEED, SUSTAIN_MS);
-    const trip = isCar
-      ? makeTrip(track, s, e, 'car', null, answers)
-      : makeTrip(track, s, e, 'other', `車ではないと判断しました（最高 時速${Math.round(maxSpeedKmh(track, s, e))}km）`, answers);
-    if (trip) trips.push(trip);
+    for (const piece of classifyRange(track, s, e)) {
+      const trip = makeTrip(track, piece.s, piece.e, piece.kind, piece.reason, answers);
+      if (trip) trips.push(trip);
+    }
   }
   return trips;
+}
+
+type Piece = { s: number; e: number; kind: TripKind; reason: string | null };
+
+/** 1回の運転を、電車の区間と車（または車ではない）の区間に分ける。順番は 新幹線・電車・LRT → 自転車など */
+export function classifyRange(track: Track, s: number, e: number): Piece[] {
+  // 電車・新幹線・LRT：線路の上が2km以上続いた区間と、時速150km以上が続いた区間を切り出す。
+  // 重なる区間や、すぐ続く区間は1つにまとめてから判断する（LRT の道路の上で速く走っていれば車）
+  const candidates = findRailRanges(track, s, e);
+  const fast = shinkansenRange(track, s, e);
+  if (fast) candidates.push(fast);
+  const trains = mergeRanges(track, candidates)
+    .map(([a, b]) => judgeRailRange(track, a, b))
+    .filter((r): r is RailRun => r != null);
+
+  const pieces: Piece[] = [];
+  let cursor = s;
+  for (const run of trains) {
+    if (run.s > cursor) pieces.push(...carOrOther(track, cursor, run.s - 1));
+    pieces.push({ s: run.s, e: run.e, kind: 'train', reason: run.reason });
+    cursor = run.e + 1;
+  }
+  if (cursor <= e) pieces.push(...carOrOther(track, cursor, e));
+  return pieces;
+}
+
+/** 自転車など：時速40km以上が30秒以上続かなかった区間は、車ではない */
+function carOrOther(track: Track, s: number, e: number): Piece[] {
+  if (sustained(track, s, e, CAR_PROOF_SPEED, SUSTAIN_MS)) return [{ s, e, kind: 'car', reason: null }];
+  return [{ s, e, kind: 'other', reason: `車ではないと判断しました（最高 時速${Math.round(maxSpeedKmh(track, s, e))}km）` }];
+}
+
+type RailRun = { s: number; e: number; reason: string };
+
+/** 点が線路の上か（線路から30m以内で、高速道路から30mより離れている） */
+function railHit(p: LocationPoint) {
+  const hit = nearestRail(p);
+  return hit != null && hit.distanceM <= ON_RAIL_M && motorwayDistanceM(p) > MOTORWAY_M ? hit : null;
+}
+
+function lengthM(track: Track, s: number, e: number): number {
+  let length = 0;
+  for (let m = s + 1; m <= e; m++) length += distanceM(track.points[m - 1], track.points[m]);
+  return length;
+}
+
+/** 線路から30m以内の点が2km以上続いた区間（点の番号の範囲） */
+function findRailRanges(track: Track, s: number, e: number): [number, number][] {
+  const { points } = track;
+  const onRail = points.slice(s, e + 1).map((p) => railHit(p) != null);
+  const ranges: [number, number][] = [];
+  let k = s;
+  while (k <= e) {
+    if (!onRail[k - s]) {
+      k++;
+      continue;
+    }
+    // 線路の上が続く区間（外れた点が200mまでなら続いているとみなす）
+    const start = k;
+    let last = k;
+    let off = 0;
+    for (let j = k + 1; j <= e; j++) {
+      if (onRail[j - s]) {
+        last = j;
+        off = 0;
+      } else {
+        off += distanceM(points[j - 1], points[j]);
+        if (off > RAIL_GAP_M) break;
+      }
+    }
+    if (lengthM(track, start, last) >= RAIL_RUN_M) ranges.push([start, last]);
+    k = last + 1;
+  }
+  return ranges;
+}
+
+/** 重なる区間や、3分以内に続く区間を1つにまとめる */
+function mergeRanges(track: Track, ranges: [number, number][]): [number, number][] {
+  const sorted = [...ranges].sort((a, b) => a[0] - b[0]);
+  const out: [number, number][] = [];
+  for (const r of sorted) {
+    const last = out[out.length - 1];
+    if (last && (r[0] <= last[1] + 1 || track.ms[r[0]] - track.ms[last[1]] <= MERGE_GAP_MS)) {
+      last[1] = Math.max(last[1], r[1]);
+    } else {
+      out.push([r[0], r[1]]);
+    }
+  }
+  return out;
+}
+
+/** 線路の上の区間が電車か（LRT の道路の上の区間で速く走っていれば車）。電車なら理由をつけて返す */
+function judgeRailRange(track: Track, s: number, e: number): RailRun | null {
+  const near = track.points.slice(s, e + 1).map(railHit).filter((h) => h != null);
+  const majority = (f: (h: (typeof near)[number]) => boolean) => near.filter(f).length > near.length / 2;
+  const onStreet = majority((h) => h.onStreet);
+  const tram = majority((h) => h.kind === 'tram' || h.kind === 'light_rail');
+  const shinkansen = sustained(track, s, e, SHINKANSEN_SPEED, SUSTAIN_MS);
+  // LRT：道路の上の区間で、時速50km以上が30秒以上続いていれば車（道路の上の LRT は時速40kmまで）
+  if (!shinkansen && onStreet && sustained(track, s, e, LRT_CAR_SPEED, SUSTAIN_MS)) return null;
+  const what = shinkansen ? '新幹線' : tram ? 'LRT' : '電車';
+  const km = (lengthM(track, s, e) / 1000).toFixed(1);
+  const from = nearestStation(track.points[s], tram ? 'tram' : 'rail');
+  const to = nearestStation(track.points[e], tram ? 'tram' : 'rail');
+  const sure = from != null && to != null && from.distanceM <= STATION_M && to.distanceM <= STATION_M;
+  const where = near.length ? `線路の上を${km}km` : `${km}km`;
+  const reason = sure
+    ? `電車と判断しました（${what}・${where}、${from.name}〜${to.name}）`
+    : `電車と判断しました（${what}・${where}。駅での乗り降りは確かめられません）`;
+  return { s, e, reason };
+}
+
+/** 時速150km以上が30秒以上続いた区間を、前後の動いている間（時速15km以上）まで広げたもの */
+function shinkansenRange(track: Track, s: number, e: number): [number, number] | null {
+  if (!sustained(track, s, e, SHINKANSEN_SPEED, SUSTAIN_MS)) return null;
+  const { sp, ms } = track;
+  let a = s;
+  while (a <= e && sp[a] < SHINKANSEN_SPEED) a++;
+  let b = e;
+  while (b >= s && sp[b] < SHINKANSEN_SPEED) b--;
+  while (a > s && sp[a - 1] >= DRIVE_SPEED && ms[a] - ms[a - 1] < BACKTRACK_GAP_MS) a--;
+  while (b < e && sp[b + 1] >= DRIVE_SPEED && ms[b + 1] - ms[b] < BACKTRACK_GAP_MS) b++;
+  return [a, b];
 }
 
 /** 点の番号 s〜e の中で、speed 以上が続けて ms 以上あったか */

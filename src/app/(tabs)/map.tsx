@@ -6,6 +6,7 @@ import { RouteMap } from '@/components/route-map';
 import { Screen, Section } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, MinTouch, Radius, Spacing } from '@/constants/theme';
+import { GEO_ATTRIBUTION } from '@/analysis/rail';
 import { CHARGERS, isHondaCharge, type Charger } from '@/data/simulator';
 import { useAnalysis } from '@/recording/use-analysis';
 
@@ -71,7 +72,7 @@ export default function MapScreen() {
             </View>
           ))}
         <ThemedText type="note" color="sub">
-          出典：e-Mobility Power・Honda Charge・Tesla・OpenStreetMap／地図：地理院タイル
+          出典：e-Mobility Power・Honda Charge・Tesla・OpenStreetMap／地図：地理院タイル／{GEO_ATTRIBUTION}
         </ThemedText>
       </Section>
     </Screen>

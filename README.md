@@ -1,3 +1,17 @@
+# EV Life Log（運転記録アプリ）
+
+ふだん通りに過ごすと、スマホが車での移動を記録し、「あなたの毎日がEVだったら」を自分の数字で見せるアプリです。
+要件は [docs/requirements.md](docs/requirements.md)、開発の約束は [CLAUDE.md](CLAUDE.md) を見てください。
+
+## データの出典
+
+- 線路・駅・高速道路（電車・新幹線・LRT の判定）：© OpenStreetMap contributors、[ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/)。
+  取り出し方は `scripts/fetch-osm-geo.mjs`、説明は [assets/geo/README.md](assets/geo/README.md)。
+- 地図：[地理院タイル](https://maps.gsi.go.jp/development/ichiran.html)
+- 車・補助金・充電スポット：Web版シミュレーターと同じデータ（`scripts/import-simulator-data.mjs`）
+
+---
+
 # Welcome to your Expo app 👋
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).

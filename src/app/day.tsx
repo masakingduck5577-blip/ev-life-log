@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
 import { spotsNearRoute } from '@/analysis/analyze';
+import { GEO_ATTRIBUTION } from '@/analysis/rail';
 import { HOME_CHARGE_KW } from '@/analysis/ev';
 import { Button } from '@/components/button';
 import { InfoBox } from '@/components/info-box';
@@ -120,6 +121,9 @@ export default function DayScreen() {
             </View>
           );
         })}
+        <ThemedText type="note" color="sub">
+          電車の判断に使う線路・駅：{GEO_ATTRIBUTION}
+        </ThemedText>
       </Section>
 
       {carType === 'ownEv' && chargerStops.length ? (
