@@ -17,12 +17,13 @@ import {
 import { RouteMap } from '@/components/route-map';
 import { Screen, Section } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
+import { TripQuestion } from '@/components/trip-question';
 import { Colors, MinTouch, Radius, Spacing } from '@/constants/theme';
 import { dateKey, formatDate, formatKm, formatShortDate, formatTime, jstDayNumber } from '@/lib/format';
 import { getProgress, useNow, useRecording, useRecordingActions } from '@/recording/recording-context';
 import { useAnalysis } from '@/recording/use-analysis';
 
-/** 記録タブ：EVだったらの結果 → 電池の残り → 記録の状態 → EVの違い → 1日の記録 */
+/** 記録タブ：記録の状態 → EVだったら → EVのバッテリー残量 → 給油と出先の充電 → 1日の記録 */
 export default function RecordScreen() {
   const snapshot = useRecording();
   const actions = useRecordingActions();
@@ -38,7 +39,7 @@ export default function RecordScreen() {
   const hasCarTrips = !!a && a.carTripCount > 0;
 
   return (
-    <Screen title="記録" onTitlePress={openDevSettings}>
+    <Screen title="EVライフログ" tabs onTitlePress={openDevSettings}>
       {!snapshot.ready ? (
         <Section title="記録中の状態">
           <ThemedText color="sub">読み込んでいます</ThemedText>
@@ -50,7 +51,7 @@ export default function RecordScreen() {
       ) : (
         <>
           {/* 記録の状態（いちばん上。距離と回数だけ） */}
-          <Section title={recording ? '記録中' : '記録を止めました'}>
+          <Section title={recording ? '記録中' : '記録を止めました'} icon={{ sf: 'record.circle', md: 'radio_button_checked' }}>
             <StatRow>
               <StatTile label="走った距離" value={formatKm(a?.carKm ?? 0)} />
               <StatTile label="運転の回数" value={`${a?.carTripCount ?? 0}回`} />
@@ -73,18 +74,19 @@ export default function RecordScreen() {
           )}
 
           {/* 本人に確かめること（結果に関わる） */}
+          {/* 1件ずつ地図で見せて、その場で答えてもらう。答えると次の1件が出る */}
           {a && a.needsAnswer.length > 0 ? (
-            <InfoBox tone="warn" title={`確かめてほしい移動が${a.needsAnswer.length}件あります`}>
-              <ThemedText>電車やバスだったかもしれない移動です。車だった移動だけを計算に入れます。</ThemedText>
-              <Button
-                label={`${formatShortDate(a.needsAnswer[0].start)}の記録を見る`}
-                variant="secondary"
-                onPress={() => router.push({ pathname: '/day', params: { date: dateKey(a.needsAnswer[0].start) } })}
+            <Section title={`確かめてほしい移動（${a.needsAnswer.length}件）`} icon={{ sf: 'questionmark.circle', md: 'help' }}>
+              <TripQuestion
+                trip={a.needsAnswer[0]}
+                answered={undefined}
+                showMap
+                onAnswer={(v) => void actions.answerTrip(a.needsAnswer[0].id, v)}
               />
-            </InfoBox>
+            </Section>
           ) : null}
           {a?.home && answers.homeConfirmed == null ? (
-            <Section title="家はここですか？" description="夜に長くいた場所を、家と考えました。家に止めていた時間で、家での充電を計算します。">
+            <Section title="家はここですか？" icon={{ sf: 'house', md: 'home' }} description="夜に長くいた場所を、家と考えました。家に止めていた時間で、家での充電を計算します。">
               <RouteMap
                 height={180}
                 label="家と考えた場所の地図"
@@ -116,7 +118,7 @@ export default function RecordScreen() {
 
           {/* 今日の移動 */}
           {recording && today ? (
-            <Section title="今日の移動">
+            <Section title="今日の移動" icon={{ sf: 'car', md: 'directions_car' }}>
               {today.trips.length === 0 ? (
                 <ThemedText color="sub">まだ移動していません。</ThemedText>
               ) : (
@@ -139,7 +141,7 @@ export default function RecordScreen() {
           ) : null}
 
           {/* 1日の記録（新しい日から） */}
-          <Section title="1日の記録">
+          <Section title="1日の記録" icon={{ sf: 'calendar', md: 'calendar_today' }}>
             <View role="list">
               {(a?.days ?? [])
                 .map((d, i) => ({ d, battery: a?.ev.normal.days[i] }))
@@ -163,7 +165,7 @@ export default function RecordScreen() {
                         </ThemedText>
                         {battery && d.carTrips.length ? (
                           <ThemedText type="note" color="sub">
-                            電池 いちばん少ないとき {Math.round(battery.minSoc)}%
+                            最も減ったとき {Math.round(battery.minSoc)}%
                           </ThemedText>
                         ) : null}
                       </View>

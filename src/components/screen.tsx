@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { router } from 'expo-router';
 
-import { Colors, MaxContentWidth, MinTouch, Radius, Spacing } from '@/constants/theme';
+import { BottomTabInset, Colors, MaxContentWidth, MinTouch, Radius, Spacing } from '@/constants/theme';
 
 import { Icon } from './icon';
 
@@ -19,16 +19,22 @@ type ScreenProps = {
   back?: boolean;
   /** 画面の下に固定するもの（「次へ」ボタンなど） */
   footer?: ReactNode;
+  /** 下のタブがある画面。スマホでは、タブの高さの分だけ下に余白を足す（タブに隠れないように） */
+  tabs?: boolean;
   children?: ReactNode;
 };
 
 /** 画面の共通の枠：見出し・説明・中身（縦にスクロール） */
-export function Screen({ title, lead, onTitlePress, back, footer, children }: ScreenProps) {
+export function Screen({ title, lead, onTitlePress, back, footer, tabs, children }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const heading = <ThemedText type="title">{title}</ThemedText>;
   return (
     <View style={[styles.safe, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          tabs && Platform.OS !== 'web' ? { paddingBottom: Spacing.five + BottomTabInset + insets.bottom } : null,
+        ]}>
         <View style={styles.inner}>
           {back ? (
             <Pressable
@@ -66,6 +72,8 @@ export function Screen({ title, lead, onTitlePress, back, footer, children }: Sc
 
 type SectionProps = {
   title: string;
+  /** 見出しの前の線のアイコン（SF Symbols / Material Symbols の名前） */
+  icon?: { sf: Parameters<typeof Icon>[0]['sf']; md: Parameters<typeof Icon>[0]['md'] };
   description?: string;
   /** まだ作っていない部分に「準備中」を付ける */
   pending?: boolean;
@@ -73,10 +81,11 @@ type SectionProps = {
 };
 
 /** 白いパネルの区切り */
-export function Section({ title, description, pending, children }: SectionProps) {
+export function Section({ title, icon, description, pending, children }: SectionProps) {
   return (
     <View style={styles.section}>
       <View style={styles.sectionHead}>
+        {icon ? <Icon sf={icon.sf} md={icon.md} size={22} color={Colors.ev} /> : null}
         <ThemedText type="heading" style={styles.sectionTitle}>
           {title}
         </ThemedText>

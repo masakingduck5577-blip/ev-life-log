@@ -5,25 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Colors, Radius } from '@/constants/theme';
 
+import { ATTRIBUTION, CENTER, LINE, PIN, pinHtml, TILE_URL } from './map-style';
 import type { MapMarker, MapPath, RouteMapProps } from './route-map.types';
 
 export type { MapMarker, MapPath } from './route-map.types';
-
-/** 地理院タイル（淡色地図）。出典の表示が必要 */
-const TILE_URL = 'https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png';
-const ATTRIBUTION =
-  '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>';
-const CENTER: [number, number] = [36.5658, 139.8836]; // 宇都宮市
-
-/** 印。種類は色だけでなく文字でも示す（急・普・H・家） */
-const PIN: Record<MapMarker['kind'], { text: string; bg: string; fg: string; border: string; size: number }> = {
-  home: { text: '家', bg: Colors.navy, fg: '#FFFFFF', border: Colors.navy, size: 30 },
-  quick: { text: '急', bg: Colors.ev, fg: '#FFFFFF', border: Colors.ev, size: 24 },
-  normal: { text: '普', bg: '#FFFFFF', fg: Colors.ev, border: Colors.ev, size: 24 },
-  // Honda Charge の印だけ赤
-  honda: { text: 'H', bg: '#FFFFFF', fg: Colors.hondaCharge, border: Colors.hondaCharge, size: 26 },
-  stop: { text: '●', bg: '#FFFFFF', fg: Colors.navy, border: Colors.navy, size: 18 },
-};
 
 type Refs = {
   L: typeof Leaflet;
@@ -45,12 +30,7 @@ function drawLayers(
   for (const p of paths) {
     const latlngs = p.points.map((q) => [q.lat, q.lng] as [number, number]);
     bounds.push(...latlngs);
-    L.polyline(latlngs, {
-      color: p.kind === 'car' ? Colors.ev : Colors.gas,
-      weight: p.kind === 'car' ? 4 : 3,
-      opacity: 0.85,
-      dashArray: p.kind === 'car' ? undefined : '6 6',
-    }).addTo(g);
+    L.polyline(latlngs, { ...LINE[p.kind], opacity: 0.85 }).addTo(g);
   }
   for (const mk of markers) {
     const pin = PIN[mk.kind];
@@ -58,7 +38,7 @@ function drawLayers(
       className: '',
       iconSize: [pin.size, pin.size],
       iconAnchor: [pin.size / 2, pin.size / 2],
-      html: `<div style="width:${pin.size}px;height:${pin.size}px;border-radius:50%;background:${pin.bg};color:${pin.fg};border:2px solid ${pin.border};display:flex;align-items:center;justify-content:center;font:700 13px/1 sans-serif;box-sizing:border-box">${pin.text}</div>`,
+      html: pinHtml(mk.kind),
     });
     const popup = document.createElement('div');
     const title = document.createElement('strong');

@@ -3,7 +3,7 @@ import { isHondaCharge, type Charger } from '@/data/simulator';
 
 import type { MapMarker } from './route-map.types';
 
-export const TRIP_LABEL: Record<TripKind, string> = { car: '車', train: '電車', bus: 'バス' };
+export const TRIP_LABEL: Record<TripKind, string> = { car: '車', train: '電車', bike: '自転車' };
 
 export function chargerKindLabel(c: Charger): string {
   if (isHondaCharge(c)) return 'Honda Charge';

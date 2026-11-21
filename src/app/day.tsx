@@ -10,6 +10,7 @@ import { chargerKindLabel, chargerMarker, TRIP_LABEL } from '@/components/labels
 import { StatRow, StatTile } from '@/components/link-row';
 import { RouteMap, type MapMarker } from '@/components/route-map';
 import { SocChart, sliceTrace } from '@/components/soc-chart';
+import { TripQuestion } from '@/components/trip-question';
 import { Screen, Section } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, MinTouch, Radius, Spacing } from '@/constants/theme';
@@ -67,7 +68,7 @@ export default function DayScreen() {
         <StatTile label="運転の回数" value={`${day.carTrips.length}回`} />
       </StatRow>
 
-      <Section title={carType === 'ownEv' ? '電池の残り' : '電池の残り（EVだったら）'}>
+      <Section title="EVのバッテリー残量" icon={{ sf: 'battery.75percent', md: 'battery_5_bar' }}>
         <SocChart
           start={dayStart}
           days={1}
@@ -79,14 +80,14 @@ export default function DayScreen() {
             value={`${Math.round(battery.startSoc)}% → ${Math.round(battery.endSoc)}%`}
           />
           <StatTile
-            label="いちばん少ないとき"
+            label="最も減ったときの残量"
             value={`${Math.round(battery.minSoc)}%`}
           />
         </StatRow>
       </Section>
 
       {a.home ? (
-        <Section title="家に止めていた時間">
+        <Section title="家に止めていた時間" icon={{ sf: 'house', md: 'home' }}>
           <ThemedText>
             {formatDuration(battery.homeParkMin)}（充電できる量 約{Math.round(battery.homeChargeableKwh)}kWh）
           </ThemedText>
@@ -97,7 +98,7 @@ export default function DayScreen() {
         </Section>
       ) : null}
 
-      <Section title="移動">
+      <Section title="移動" icon={{ sf: 'car', md: 'directions_car' }}>
         {day.trips.length === 0 ? <ThemedText color="sub">この日は移動がありません。</ThemedText> : null}
         {day.trips.map((t) => {
           const answered = answers.trips?.[t.id];
@@ -111,27 +112,7 @@ export default function DayScreen() {
                 <ThemedText style={styles.tripKm}>{formatKm(t.distanceKm)}</ThemedText>
               </View>
               {t.guess !== 'car' ? (
-                <View style={styles.ask}>
-                  <ThemedText>
-                    {answered
-                      ? answered === 'car'
-                        ? '「車だった」と答えました。計算に入れています。'
-                        : '「電車・バスだった」と答えました。計算に入れていません。'
-                      : `${TRIP_LABEL[t.guess]}だったかもしれません（最高 時速${Math.round(t.maxSpeedKmh)}km、乗る前に歩いて待っていた）。車でしたか？`}
-                  </ThemedText>
-                  {answered ? (
-                    <Button label="答えを変える" variant="secondary" onPress={() => void actions.answerTrip(t.id, null)} />
-                  ) : (
-                    <View style={styles.row2}>
-                      <View style={{ flex: 1 }}>
-                        <Button label="車だった" variant="secondary" onPress={() => void actions.answerTrip(t.id, 'car')} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Button label="電車・バスだった" variant="secondary" onPress={() => void actions.answerTrip(t.id, 'transit')} />
-                      </View>
-                    </View>
-                  )}
-                </View>
+                <TripQuestion trip={t} answered={answered} onAnswer={(v) => void actions.answerTrip(t.id, v)} />
               ) : null}
             </View>
           );
@@ -139,7 +120,7 @@ export default function DayScreen() {
       </Section>
 
       {carType === 'ownEv' && chargerStops.length ? (
-        <Section title="充電スポットに止まりました">
+        <Section title="充電スポットに止まりました" icon={{ sf: 'ev.charger', md: 'ev_station' }}>
           {chargerStops.map((cs) => (
             <ChargeQuestion
               key={cs.stop.id}
@@ -153,7 +134,7 @@ export default function DayScreen() {
         </Section>
       ) : null}
 
-      <Section title="近くの充電スポット" description="この日に車で通った道から500m以内。">
+      <Section title="近くの充電スポット" icon={{ sf: 'mappin.and.ellipse', md: 'location_on' }} description="この日に車で通った道から500m以内。">
         {spots.length === 0 ? <ThemedText color="sub">ありません。</ThemedText> : null}
         {spots.slice(0, 8).map((s) => (
           <View key={s.charger.id} style={styles.spot}>
@@ -251,12 +232,6 @@ const styles = StyleSheet.create({
   tripKm: {
     flex: 1,
     textAlign: 'right',
-  },
-  ask: {
-    gap: Spacing.two,
-    padding: Spacing.three,
-    borderRadius: Radius.sm,
-    backgroundColor: Colors.warnTint,
   },
   row2: {
     flexDirection: 'row',

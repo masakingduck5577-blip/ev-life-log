@@ -51,7 +51,7 @@ export type DayBattery = {
   publicCharges: number;
 };
 
-/** 電池の残りの移り変わり（グラフ用）。時刻の順 */
+/** バッテリー残量の移り変わり（グラフ用）。時刻の順 */
 export type SocPoint = { t: number; soc: number };
 
 export type SeasonResult = {

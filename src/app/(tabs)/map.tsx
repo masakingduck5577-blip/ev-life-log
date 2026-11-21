@@ -29,7 +29,7 @@ export default function MapScreen() {
   const nearIds = new Set(a?.spots.map((s) => s.charger.id) ?? []);
 
   return (
-    <Screen title="充電マップ" lead="宇都宮市のまわりの充電スポットと、あなたが車で通った道です。">
+    <Screen title="充電マップ" tabs lead="充電スポットと、あなたが車で通った道。">
       <View style={styles.filters} role="radiogroup" aria-label="充電スポットの種類">
         {FILTERS.map((f) => (
           <Pressable
@@ -55,12 +55,9 @@ export default function MapScreen() {
         ]}
       />
       <ThemedText type="note" color="sub">
-        印：急（急速）・普（普通）・H（Honda Charge）・家。青い線は、あなたが車で通った道。
+        急＝急速・普＝普通・H＝Honda Charge・青い線＝通った道
       </ThemedText>
-      <Section title={`${FILTERS.find((f) => f.value === filter)?.label}：${list.length}か所`}>
-        {a?.spots.length ? (
-          <ThemedText>あなたが通った道の近く（500m以内）に {a.spots.filter((s) => match(s.charger, filter)).length}か所あります。</ThemedText>
-        ) : null}
+      <Section title={`通った道の近く（500m以内）：${a ? a.spots.filter((s) => match(s.charger, filter)).length : 0}か所`}>
         {list
           .filter((c) => nearIds.has(c.id))
           .slice(0, 10)
@@ -74,7 +71,7 @@ export default function MapScreen() {
             </View>
           ))}
         <ThemedText type="note" color="sub">
-          出典：e-Mobility Power 充電スポット一覧・Honda Charge 設置施設一覧・Tesla 充電器一覧・OpenStreetMap（Web版シミュレーターと同じデータ）。地図：地理院タイル。
+          出典：e-Mobility Power・Honda Charge・Tesla・OpenStreetMap／地図：地理院タイル
         </ThemedText>
       </Section>
     </Screen>

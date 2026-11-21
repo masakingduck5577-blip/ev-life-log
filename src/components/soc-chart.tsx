@@ -26,7 +26,7 @@ type Props = {
 };
 
 /**
- * 電池の残りの移り変わり（折れ線）。運転で下がり、家で充電すると上がる。
+ * EVのバッテリー残量の移り変わり（折れ線）。運転で下がり、家で充電すると上がる。
  * 安心ライン（20%）に線を引く。
  * 日数が多いときは横に送って見る（最初は新しい日を見せる）。
  */
@@ -43,7 +43,7 @@ export function SocChart({ start, days, normal }: Props) {
   return (
     <View style={{ gap: Spacing.two }}>
       <View style={styles.legend}>
-        <LegendLine color={Colors.ev} text="電池の残り" width={3} />
+        <LegendLine color={Colors.ev} text="バッテリー残量" width={3} />
         <LegendLine color={Colors.warn} text={`安心ライン ${SAFE_SOC}%`} dashed width={2} />
       </View>
 
@@ -51,7 +51,7 @@ export function SocChart({ start, days, normal }: Props) {
         style={styles.chartRow}
         onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
         accessible
-        accessibilityLabel={`電池の残りのグラフ。いちばん少ないとき${minOf(normal)}%`}>
+        accessibilityLabel={`バッテリー残量のグラフ。最も減ったとき${minOf(normal)}%`}>
         {/* 目盛り（%） */}
         <View style={[styles.axis, { height: PAD_TOP + H + 30 }]}>
           {TICKS.map((v) => (

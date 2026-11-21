@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 
 import { Colors, MinTouch, Radius, Spacing } from '@/constants/theme';
 
@@ -46,10 +46,12 @@ type ChoiceProps = {
   disabled?: boolean;
   /** 右に出す小さい札（例：「準備中」） */
   badge?: string;
+  /** 車の写真など */
+  image?: string;
 };
 
 /** 選ぶカード（ラジオボタン）。選んだものは枠の色と丸の印で示す（色だけにしない） */
-export function Choice({ title, description, selected, onPress, disabled, badge }: ChoiceProps) {
+export function Choice({ title, description, selected, onPress, disabled, badge, image }: ChoiceProps) {
   return (
     <Pressable
       role="radio"
@@ -66,6 +68,7 @@ export function Choice({ title, description, selected, onPress, disabled, badge 
       <View style={[styles.radio, selected && styles.radioSelected]}>
         {selected ? <View style={styles.radioDot} /> : null}
       </View>
+      {image ? <Image source={{ uri: image }} style={styles.choiceImage} resizeMode="contain" /> : null}
       <View style={styles.choiceText}>
         <ThemedText type="bold" color={disabled ? 'sub' : 'ink'}>
           {title}
@@ -132,6 +135,10 @@ const styles = StyleSheet.create({
   },
   choiceDisabled: {
     backgroundColor: Colors.bg,
+  },
+  choiceImage: {
+    width: 72,
+    height: 44,
   },
   choiceText: {
     flex: 1,

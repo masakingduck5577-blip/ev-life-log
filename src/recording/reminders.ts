@@ -33,7 +33,7 @@ export async function startReminders(startedAt: number) {
       resultId(day),
       at20(startedAt + (day - 1) * DAY_MS),
       `記録した${day}日間の結果を見てみましょう`,
-      'あなたの毎日がEVだったら、電池の残りがどうなるかを見られます。',
+      'あなたの毎日がEVだったら、EVのバッテリー残量がどうなるかを見られます。',
     );
   }
   await scheduleMissing(startedAt);

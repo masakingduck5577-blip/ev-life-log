@@ -49,7 +49,7 @@ export default function MemoScreen() {
   const ownEv = carType === 'ownEv';
 
   return (
-    <Screen title="相談メモ" lead="記録の結果を1枚にまとめました。お店でスタッフに見せられます。">
+    <Screen title="相談メモ" tabs lead="記録の結果を1枚にまとめました。お店でスタッフに見せられます。">
       {!a || !ev || a.carTripCount === 0 ? (
         <InfoBox>記録が進むと、ここに結果がまとまります。</InfoBox>
       ) : (
@@ -64,7 +64,7 @@ export default function MemoScreen() {
           {!ownEv ? <Line label="判定" value={ev.verdict.text} strong /> : null}
           <Line label={`${ev.days}日間に走った距離`} value={`${formatKm(a.carKm)}（運転 ${a.carTripCount}回・1年で約${formatNumberKm(ev.yearKm)}）`} />
           <Line
-            label="電池の残り（いちばん少ないとき）"
+            label="EVのバッテリー残量（最も減ったとき）"
             value={`${Math.round(ev.normal.minSoc)}%`}
           />
           <Line label="自宅で充電" value={HOME_LABEL[settings.homeEnv]} />

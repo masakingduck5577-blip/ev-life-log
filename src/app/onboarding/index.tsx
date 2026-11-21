@@ -1,24 +1,16 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Linking, Platform, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import type { AndroidSymbol, SFSymbol } from 'expo-symbols';
 
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { InfoBox } from '@/components/info-box';
+import { PermissionRows } from '@/components/permission-rows';
 import { Screen, Section } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import {
-  getNotificationPermission,
-  requestNotificationPermission,
-  type NotificationPermission,
-} from '@/lib/notifications';
-import {
-  getLocationPermission,
-  requestLocationPermission,
-  type LocationPermission,
-} from '@/location/source';
+import { usePermissions } from '@/lib/use-permissions';
 import { useRecording } from '@/recording/recording-context';
 
 const IS_WEB = Platform.OS === 'web';
@@ -40,22 +32,26 @@ const STEPS: { sf: SFSymbol; md: AndroidSymbol; title: string; body: string }[] 
     sf: 'chart.bar',
     md: 'bar_chart',
     title: '記録した日の分だけ、結果が出る',
-    body: 'EVだったら毎日の電池の残りはどうなるか、通った道の充電スポット、費用の違いを見せます。翌日・3日目・7日目にお知らせします。',
+    body: 'EVだったら毎日のバッテリー残量はどうなるか、通った道の充電スポット、費用の違いを見せます。翌日・3日目・7日目にお知らせします。',
   },
 ];
 
 /** 1. はじめに：アプリの説明・記録のしかた・許可 */
 export default function WelcomeScreen() {
   const { onboarded, startedAt, stoppedAt } = useRecording();
-  const [location, setLocation] = useState<LocationPermission | null>(null);
-  const [notification, setNotification] = useState<NotificationPermission | null>(null);
+  const { location, notification, askAll } = usePermissions();
+  const [asking, setAsking] = useState(false);
 
-  useEffect(() => {
-    void getLocationPermission().then(setLocation);
-    void getNotificationPermission().then(setNotification);
-  }, []);
-
-  const locationOk = IS_WEB || location === 'always';
+  // 「はじめる」：まだ許可していなければ、iPhone の確認の画面を順に出してから入力へ
+  const start = async () => {
+    setAsking(true);
+    try {
+      await askAll();
+    } finally {
+      setAsking(false);
+    }
+    router.push('/onboarding/setup');
+  };
 
   return (
     <Screen
@@ -63,12 +59,7 @@ export default function WelcomeScreen() {
       lead="ふだん通りに過ごすと、車での移動を記録して「あなたの毎日がEVだったら」を、あなたの数字で見せます。"
       footer={
         <>
-          {!locationOk ? (
-            <ThemedText type="note" color="sub">
-              位置を「常に」許可しないと、画面を閉じている間は記録できません。あとから設定アプリで変えられます。
-            </ThemedText>
-          ) : null}
-          <Button label="はじめる" onPress={() => router.push('/onboarding/setup')} />
+          <Button label="はじめる" disabled={asking} onPress={() => void start()} />
           <Button
             label="テストデータで試す"
             variant="secondary"
@@ -114,107 +105,13 @@ export default function WelcomeScreen() {
           </InfoBox>
         ) : null}
 
-        <PermissionRow
-          sf="location"
-          md="location_on"
-          title="位置情報（「常に」）"
-          body="画面を閉じている間も、車での移動を記録するために使います。最初の確認で「アプリの使用中は許可」、次に出る確認で「“常に許可”に変更」を選んでください。"
-          status={locationStatus(location)}
-          action={
-            IS_WEB || location === 'always'
-              ? null
-              : location === 'whenInUse' || location === 'denied'
-                ? { label: '設定アプリを開く', onPress: () => void Linking.openSettings() }
-                : { label: '位置の使用を許可する', onPress: () => void requestLocationPermission().then(setLocation) }
-          }
-        />
-        <PermissionRow
-          sf="bell"
-          md="notifications"
-          title="お知らせ（任意）"
-          body="結果が出たときと、記録が止まっているときにお知らせします。"
-          status={notificationStatus(notification)}
-          action={
-            notification === 'undetermined'
-              ? {
-                  label: 'お知らせを許可する',
-                  onPress: () => void requestNotificationPermission().then(setNotification),
-                }
-              : null
-          }
-        />
+        <PermissionRows location={location} notification={notification} />
       </Section>
 
       <InfoBox title="登録はいりません。位置はスマホの外に送りません">
         名前やメールアドレスの登録はいりません。位置と通った道は、スマホの中だけで計算します。
       </InfoBox>
     </Screen>
-  );
-}
-
-type Status = { tone: 'ok' | 'warn' | 'sub'; text: string };
-
-function locationStatus(p: LocationPermission | null): Status | null {
-  switch (p) {
-    case 'always':
-      return { tone: 'ok', text: '✓ 「常に許可」になっています' };
-    case 'whenInUse':
-      return { tone: 'warn', text: '今は「使用中のみ」です。設定アプリで「常に」に変えてください' };
-    case 'denied':
-      return { tone: 'warn', text: '許可されていません。設定アプリで「常に」にしてください' };
-    case 'unavailable':
-      return { tone: 'sub', text: 'ブラウザでは使いません' };
-    default:
-      return null;
-  }
-}
-
-function notificationStatus(p: NotificationPermission | null): Status | null {
-  switch (p) {
-    case 'granted':
-      return { tone: 'ok', text: '✓ 許可されています' };
-    case 'denied':
-      return { tone: 'sub', text: 'オフです（設定アプリで変えられます）' };
-    case 'unavailable':
-      return { tone: 'sub', text: 'ブラウザでは使いません' };
-    default:
-      return null;
-  }
-}
-
-function PermissionRow({
-  sf,
-  md,
-  title,
-  body,
-  status,
-  action,
-}: {
-  sf: SFSymbol;
-  md: AndroidSymbol;
-  title: string;
-  body: string;
-  status: Status | null;
-  action: { label: string; onPress: () => void } | null;
-}) {
-  return (
-    <View style={styles.permission}>
-      <View style={styles.step}>
-        <View style={styles.stepIcon}>
-          <Icon sf={sf} md={md} size={22} color={Colors.navy} />
-        </View>
-        <View style={styles.stepText}>
-          <ThemedText type="bold">{title}</ThemedText>
-          <ThemedText color="sub">{body}</ThemedText>
-          {status ? (
-            <ThemedText type="bold" color={status.tone}>
-              {status.text}
-            </ThemedText>
-          ) : null}
-        </View>
-      </View>
-      {action ? <Button label={action.label} variant="secondary" onPress={action.onPress} /> : null}
-    </View>
   );
 }
 
@@ -235,9 +132,5 @@ const styles = StyleSheet.create({
   stepText: {
     flex: 1,
     gap: Spacing.half,
-  },
-  permission: {
-    gap: Spacing.two,
-    paddingTop: Spacing.two,
   },
 });
