@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EVライフログ プライバシーポリシー</title>
+<style>
+  :root { --bg: #F2F5F9; --panel: #FFFFFF; --ink: #0F1726; --sub: #4A5361; --navy: #0A2540; --line: #DFE3E8; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.8 -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 26px; color: var(--navy); margin: 8px 0 4px; }
+  h2 { font-size: 20px; color: var(--navy); margin: 32px 0 8px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 4px 20px 12px; margin-top: 16px; }
+  p, li { margin: 8px 0; }
+  .note { color: var(--sub); font-size: 14px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 4px; text-align: left; vertical-align: top; }
+  th { width: 34%; font-weight: 700; }
+  a { color: #1F6FEB; }
+</style>
+</head>
+<body>
+<main>
+  <h1>EVライフログ プライバシーポリシー</h1>
+  <p class="note">2026年11月21日 制定（試験版）</p>
+
+  <p>EVライフログ（以下「このアプリ」）は、ふだんの車での移動を記録して、「あなたの毎日がEVだったら」を計算して見せるアプリです。萌芽ハッカソン（本田技術研究所テーマ）のチームが作っている試験版です。このページでは、このアプリが扱う情報と、その使い方を説明します。</p>
+
+  <section>
+    <h2>1. いちばん大事なこと</h2>
+    <ul>
+      <li><strong>位置情報は、スマホの中だけで計算します。外に送ることはありません。</strong></li>
+      <li>名前・メールアドレス・電話番号などの登録はありません。</li>
+      <li>広告や、使い方を集める解析ツールは入っていません。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>2. このアプリが扱う情報</h2>
+    <table>
+      <tr><th>位置情報</th><td>時刻・緯度・経度・速さ・位置の誤差。画面を閉じている間も、車での移動を記録するために取ります（位置の使用を「常に」許可したときだけ）。</td></tr>
+      <tr><th>入力した設定</th><td>車の種類、住んでいる市区町村、今の車の燃費、自宅で充電できるか、検討中のEV、家の電気料金など。</td></tr>
+      <tr><th>あなたの答え</th><td>推定した家の場所が合っているか、「車だった」への直し、充電スポットで充電したか など。</td></tr>
+    </table>
+    <p>これらはすべて、スマホの中（アプリの保存場所）にだけ保存します。</p>
+  </section>
+
+  <section>
+    <h2>3. 使い方</h2>
+    <ul>
+      <li>車での移動の見分け（電車・LRT・新幹線・自転車などとの区別を含む）。</li>
+      <li>EVだった場合のバッテリー残量、充電の回数、燃料代・電気代の計算。</li>
+      <li>通った道の近くの充電スポットを探すこと。</li>
+      <li>結果が出たとき、記録がない日のお知らせ（スマホの中で予約する通知です。サーバーからは送りません）。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>4. 外とのやり取り</h2>
+    <p>次の場合だけ、インターネットを使います。どれも、あなたの位置の記録を送るものではありません。</p>
+    <ul>
+      <li><strong>地図を表示するとき</strong>：地図の画像を国土地理院（地理院タイル）から、地図の部品（Leaflet）を unpkg.com から読み込みます。表示している範囲の地図の画像を取りに行くため、その範囲がそれぞれのサーバーに伝わります。</li>
+      <li><strong>車の写真を表示するとき</strong>：Honda の公式サイトから写真を読み込みます。</li>
+      <li><strong>「シミュレーション」のタブを開くとき</strong>：Web版シミュレーターを開きます。1年の走行距離・EVの車種・燃費・自宅で充電できるかを、URL の「#」より後ろに入れて渡します。この部分はサーバーには送られず、開いた画面の中だけで使われます。位置は含みません。</li>
+    </ul>
+    <p>電車の判断に使う線路・駅・高速道路のデータ（© OpenStreetMap contributors、ODbL）は、アプリの中に入っていて、使うときに外へ問い合わせることはありません。</p>
+  </section>
+
+  <section>
+    <h2>5. 第三者への提供</h2>
+    <p>このアプリが扱う情報を、第三者に渡すことはありません。</p>
+    <p>今後、試した人の結果を集める仕組み（集計した結果だけを送る）を入れる場合は、送る内容を画面で説明し、あなたが同意したときだけ送ります。そのときは、このページも改めます。</p>
+  </section>
+
+  <section>
+    <h2>6. 記録を消すには</h2>
+    <p>アプリを削除すると、スマホの中の記録と設定はすべて消えます。位置の使用は、いつでも設定アプリ（設定 → EVライフログ → 位置情報）で止められます。</p>
+  </section>
+
+  <section>
+    <h2>7. お問い合わせ</h2>
+    <p>EVライフログ 開発チーム（萌芽ハッカソン）<br>連絡先：<a href="mailto:masaking.duck5577@gmail.com">masaking.duck5577@gmail.com</a></p>
+  </section>
+
+  <section lang="en">
+    <h2>Summary (English)</h2>
+    <p>EV Life Log is a trial app that records your car trips and estimates what they would look like with an EV. Location data (time, latitude, longitude, speed, accuracy) and your settings are processed and stored only on your device and are never sent to any server. There is no account, no advertising and no analytics. The app only connects to the internet to load map tiles (GSI Japan) and the Leaflet map library (unpkg.com), car photos (Honda official website), and the web simulator, which receives only yearly distance, EV model, fuel economy and home-charging availability in the URL fragment (not sent to the server). Notifications are scheduled locally on the device. Deleting the app deletes all data.</p>
+  </section>
+</main>
+</body>
+</html>

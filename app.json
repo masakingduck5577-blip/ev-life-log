@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "ev-life-log",
+    "name": "EVライフログ",
     "slug": "ev-life-log",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,7 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "bundleIdentifier": "com.masaki.evlifelog",
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/images/icon.png",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

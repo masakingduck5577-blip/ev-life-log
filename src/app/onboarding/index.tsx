@@ -61,12 +61,12 @@ export default function WelcomeScreen() {
         <>
           <Button label="はじめる" disabled={asking} onPress={() => void start()} />
           <Button
-            label="テストデータで試す"
+            label="お試しで見る（架空の7日間）"
             variant="secondary"
             onPress={() => router.push({ pathname: '/onboarding/setup', params: { trial: '1' } })}
           />
           <ThemedText type="note" color="sub">
-            テストデータ：宇都宮市周辺の架空の7日間で、結果の見え方を試せます。位置の許可はいりません。
+            お試し：宇都宮市周辺の架空の7日間で、結果の見え方を見られます。位置の許可はいりません。
           </ThemedText>
         </>
       }>

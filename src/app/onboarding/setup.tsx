@@ -46,9 +46,11 @@ export default function SetupScreen() {
   const start = async () => {
     setBusy(true);
     try {
-      // 「テストデータで試す」から来たときはテストデータ、「はじめる」からはスマホの記録（ブラウザは常にテストデータ）
+      // 「お試しで見る」から来たときはテストデータ、「はじめる」からはスマホの記録（ブラウザは常にテストデータ）
       await actions.setMode(isTrial ? 'test' : 'device');
       await actions.completeOnboarding(car);
+      // スマホの本番用のアプリでお試しするときは、7日間の終わりまで進めて、すぐ結果を見せる
+      if (isTrial && !__DEV__ && Platform.OS !== 'web') await actions.jumpToEnd();
       router.replace('/');
     } finally {
       setBusy(false);
@@ -62,7 +64,7 @@ export default function SetupScreen() {
       back
       footer={
         <Button
-          label={isTrial ? 'テストデータで試す' : continuing ? '記録へ' : '記録を始める'}
+          label={isTrial ? 'お試しで見る' : continuing ? '記録へ' : '記録を始める'}
           disabled={busy}
           onPress={() => void start()}
         />

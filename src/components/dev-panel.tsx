@@ -40,6 +40,8 @@ export function DevPanel() {
   const [open, setOpen] = useState(IS_WEB && width >= 700);
 
   if (!snapshot.ready || snapshot.mode !== 'test') return null;
+  // スマホの本番用のアプリでは、開発用の設定で出すと決めたときだけ出す（お店や審査の人に見せないため）
+  if (!IS_WEB && !__DEV__ && !snapshot.devTools) return null;
   const progress = getProgress(snapshot, now);
   const scenario = getScenario(snapshot.scenarioId);
   const dayStarts = Array.from({ length: TEST_DATA_DAYS }, (_, i) =>

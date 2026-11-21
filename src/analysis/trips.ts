@@ -11,7 +11,7 @@
  *         区間の始まりと終わりがどちらも駅から200m以内なら、電車の判断を確かなものとする
  *   新幹線：時速150km以上が30秒以上続いた区間は電車（線路の上の区間ごと切り出す）
  *   LRT：線路が道路の上を走る区間では、時速50km以上が30秒以上続いていれば車とする
- *   自転車など：時速40km以上が30秒以上続かなかった運転は、車ではないとする
+ *   自転車など：時速35km以上が30秒以上続かなかった運転は、車ではないとする
  * - 車ではないと判断した移動は計算に入れず、理由を出す。本人が「車だった」に直せる
  */
 
@@ -37,8 +37,8 @@ const WAIT_RADIUS_M = 100;
 const MAX_ACCURACY_M = 50;
 /** これより短い移動は数えない（m）。位置のぶれで生まれる見かけの移動を除くため */
 const MIN_TRIP_M = 500;
-/** 車とみなす速さ：時速40km以上（自転車ではまず続けて出ない速さ） */
-const CAR_PROOF_SPEED = 40 / 3.6;
+/** 車とみなす速さ：時速35km以上（自転車ではまず続けて出ない速さ。街中の車は時速40km前後で走ることが多いため40kmより下げる） */
+const CAR_PROOF_SPEED = 35 / 3.6;
 /** その速さが続く時間：30秒以上（下り坂の自転車や、位置のぶれの一瞬を除くため） */
 const SUSTAIN_MS = 30 * 1000;
 /** 線路の上とみなす距離（m）。GPS のぶれ（10〜20m）と、複線の幅を含む */
@@ -242,7 +242,7 @@ export function classifyRange(track: Track, s: number, e: number): Piece[] {
   return pieces;
 }
 
-/** 自転車など：時速40km以上が30秒以上続かなかった区間は、車ではない */
+/** 自転車など：時速35km以上が30秒以上続かなかった区間は、車ではない */
 function carOrOther(track: Track, s: number, e: number): Piece[] {
   if (sustained(track, s, e, CAR_PROOF_SPEED, SUSTAIN_MS)) return [{ s, e, kind: 'car', reason: null }];
   return [{ s, e, kind: 'other', reason: `車ではないと判断しました（最高 時速${Math.round(maxSpeedKmh(track, s, e))}km）` }];

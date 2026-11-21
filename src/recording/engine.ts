@@ -87,6 +87,8 @@ export type RecordingSnapshot = {
   /** 本人の答え（家の確認・電車かバスか・充電したか）。データの組ごと */
   answers: Answers;
   error: string | null;
+  /** スマホの本番用のアプリでも「テスト操作」の欄を出すか（開発用の設定で切りかえる） */
+  devTools: boolean;
 };
 
 const KEYS = {
@@ -99,6 +101,7 @@ const KEYS = {
   deviceStoppedAt: 'device.stoppedAt',
   settings: 'user.settings',
   answers: (dataset: string) => `answers.${dataset}`,
+  devTools: 'dev.tools',
 } as const;
 
 type SavedTestClock = { scenarioId: ScenarioId; simTime: number; speed: PlaybackSpeed };
@@ -131,6 +134,7 @@ class RecordingEngine {
     settings: DEFAULT_SETTINGS,
     answers: {},
     error: null,
+    devTools: false,
   };
   /** 受け取った点（分析に使う）。pointCount が変わったら読み直す */
   private points: LocationPoint[] = [];
@@ -181,7 +185,8 @@ class RecordingEngine {
         : ((await s.getSetting<RecordingMode>(KEYS.mode)) ?? 'device');
       const scenarioId = (await s.getSetting<ScenarioId>(KEYS.scenario)) ?? DEFAULT_SCENARIO;
       const settings = { ...DEFAULT_SETTINGS, ...(await s.getSetting<Partial<UserSettings>>(KEYS.settings)) };
-      this.set({ onboarded, carType, mode, scenarioId, settings });
+      const devTools = (await s.getSetting<boolean>(KEYS.devTools)) ?? false;
+      this.set({ onboarded, carType, mode, scenarioId, settings, devTools });
       await this.setUp();
       this.set({ ready: true });
     } catch (e) {
@@ -426,6 +431,11 @@ class RecordingEngine {
     const settings = { ...this.snapshot.settings, ...patch };
     this.set({ settings });
     await this.store.setSetting(KEYS.settings, settings);
+  }
+
+  async setDevTools(devTools: boolean) {
+    await this.store.setSetting(KEYS.devTools, devTools);
+    this.set({ devTools });
   }
 
   async setCarType(carType: CarType) {

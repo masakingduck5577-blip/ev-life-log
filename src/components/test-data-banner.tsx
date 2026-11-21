@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors, Spacing } from '@/constants/theme';
@@ -9,7 +9,8 @@ import { ThemedText } from './themed-text';
 
 /** テストデータのとき、画面の上に出す帯（目立ちすぎないように、薄い青に紺の文字） */
 export function TestDataBanner() {
-  const { mode, scenarioId, ready } = useRecording();
+  const { mode, scenarioId, ready, devTools } = useRecording();
+  const showScenario = Platform.OS === 'web' || __DEV__ || devTools;
   const insets = useSafeAreaInsets();
   if (!ready || mode !== 'test') return null;
 
@@ -17,7 +18,7 @@ export function TestDataBanner() {
     <View role="status" style={[styles.bar, { paddingTop: insets.top + Spacing.one }]}>
       <Icon sf="info.circle" md="info" size={18} color={Colors.navy} />
       <ThemedText type="note" color="navy" style={styles.text}>
-        テストデータで表示中（シナリオ{scenarioId}）
+        お試し表示中（架空の7日間のデータ{showScenario ? `・シナリオ${scenarioId}` : ''}）
       </ThemedText>
     </View>
   );

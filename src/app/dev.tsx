@@ -18,7 +18,7 @@ const IS_WEB = Platform.OS === 'web';
  * 開発用ビルドでは記録タブのボタンから、デモ用のビルドでは「記録」の見出しを5回押すと開く。
  */
 export default function DevSettingsScreen() {
-  const { mode, scenarioId, answers } = useRecording();
+  const { mode, scenarioId, answers, devTools } = useRecording();
   const actions = useRecordingActions();
   const result = useAnalysis();
   const trips = result?.analysis.trips ?? [];
@@ -49,6 +49,15 @@ export default function DevSettingsScreen() {
           </View>
         )}
       </Section>
+
+      {!IS_WEB && !__DEV__ ? (
+        <Section title="テスト操作の欄">
+          <View style={{ gap: Spacing.two }} role="radiogroup" aria-label="テスト操作の欄">
+            <Choice title="出さない（お店・一般の人向け）" selected={!devTools} onPress={() => void actions.setDevTools(false)} />
+            <Choice title="出す（日付へ・早送り・結果へ）" selected={devTools} onPress={() => void actions.setDevTools(true)} />
+          </View>
+        </Section>
+      ) : null}
 
       {mode === 'test' ? (
         <Section title="シナリオ">
