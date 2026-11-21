@@ -65,11 +65,11 @@ export default function MemoScreen() {
           <Line label={`${ev.days}日間に走った距離`} value={`${formatKm(a.carKm)}（運転 ${a.carTripCount}回・1年で約${formatNumberKm(ev.yearKm)}）`} />
           <Line
             label="電池の残り（いちばん少ないとき）"
-            value={`ふだん ${Math.round(ev.normal.minSoc)}%・冬 ${Math.round(ev.winter.minSoc)}%`}
+            value={`${Math.round(ev.normal.minSoc)}%`}
           />
           <Line label="自宅で充電" value={HOME_LABEL[settings.homeEnv]} />
           {settings.homeEnv === 'none' ? (
-            <Line label="外での充電" value={`${ev.days}日間で約${formatTimes(ev.publicCount.normal)}（冬は約${formatTimes(ev.publicCount.winter)}）`} />
+            <Line label="外での充電" value={`${ev.days}日間で約${formatTimes(ev.publicCount)}`} />
           ) : null}
           {ownEv && result ? (
             <Line label="あなたの充電代" value={`${ev.days}日間で ${formatYen(result.own.totalYen)}（1kmあたり ${result.own.perKmYen.toFixed(1)}円）`} strong />

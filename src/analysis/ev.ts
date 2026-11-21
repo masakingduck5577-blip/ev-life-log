@@ -78,14 +78,14 @@ export type EvResult = {
   totalKm: number;
   /** 1日の平均 × 365 */
   yearKm: number;
+  /** 記録した時期の電費での計算 */
   normal: SeasonResult;
-  winter: SeasonResult;
   /** 記録した日数の費用（円） */
   cost: { gas: number; ev: number; evHome: number; evPublic: number; gasLiters: number };
   /** 記録した日数で、外で充電する回数（家で充電できない人は、ならした値） */
-  publicCount: { normal: number; winter: number };
+  publicCount: number;
   /** 判定の1行 */
-  verdict: { level: 'ok' | 'winter' | 'public'; text: string };
+  verdict: { level: 'ok' | 'public'; text: string };
 };
 
 /** 季節の係数（記録した月から）。冬：12〜2月、夏：6〜8月、ほか1 */
@@ -218,7 +218,6 @@ export function calcEv(
   const factor = seasonFactorFor(periodStart);
 
   const normal = simulate(ev, trips, stops, homeCharge, factor, start, days, 'normal', until);
-  const winter = simulate(ev, trips, stops, homeCharge, PARAMS.winterFactor, start, days, 'winter', until);
 
   const totalKm = trips.filter((t) => t.kind === 'car').reduce((s, t) => s + t.distanceKm, 0);
   // 走った分の電気を、家と外のどちらで入れたか（家の充電が足りない分は外）
@@ -233,29 +232,21 @@ export function calcEv(
   // 外で充電する回数。家で充電できない人は、使った電気をすべて外で入れる
   // （1回で 安心ライン20% → 80% まで入れるとして、ならした回数）
   const perCharge = (ev.batteryKwh * (PUBLIC_TARGET_SOC - SAFE_SOC)) / 100;
-  const publicCount = {
-    normal: homeCharge ? normal.publicCharges : normal.usedKwh / perCharge,
-    winter: homeCharge ? winter.publicCharges : winter.usedKwh / perCharge,
-  };
+  const publicCount = homeCharge ? normal.publicCharges : normal.usedKwh / perCharge;
 
   let verdict: EvResult['verdict'];
   if (!homeCharge) {
     verdict = {
       level: 'public',
-      text: `家で充電できないので、${days}日間で外での充電が約${formatTimes(publicCount.normal)}必要です`,
+      text: `家で充電できないので、${days}日間で外での充電が約${formatTimes(publicCount)}必要です`,
     };
   } else if (normal.publicCharges > 0) {
     verdict = {
       level: 'public',
       text: `${days}日間で、外での充電が${normal.publicCharges}回必要です`,
     };
-  } else if (winter.publicCharges > 0 || winter.minSoc < SAFE_SOC) {
-    verdict = {
-      level: 'winter',
-      text: 'ふだんは充電の不安なし。冬は外での充電が必要になることがあります',
-    };
   } else {
-    verdict = { level: 'ok', text: '充電スポットの不安なし（冬も安心）' };
+    verdict = { level: 'ok', text: '家の充電だけで足ります' };
   }
 
   return {
@@ -267,7 +258,6 @@ export function calcEv(
     totalKm,
     yearKm: (totalKm / days) * 365,
     normal,
-    winter,
     cost: { gas: gasCost, ev: evHome + evPublic, evHome, evPublic, gasLiters },
     publicCount,
     verdict,

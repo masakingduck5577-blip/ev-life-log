@@ -23,15 +23,14 @@ type Props = {
   start: number;
   days: number;
   normal: SocPoint[];
-  winter: SocPoint[];
 };
 
 /**
  * 電池の残りの移り変わり（折れ線）。運転で下がり、家で充電すると上がる。
- * ふだん（実線）と冬（点線）を重ね、安心ライン（20%）に線を引く。
+ * 安心ライン（20%）に線を引く。
  * 日数が多いときは横に送って見る（最初は新しい日を見せる）。
  */
-export function SocChart({ start, days, normal, winter }: Props) {
+export function SocChart({ start, days, normal }: Props) {
   const [width, setWidth] = useState(0);
   const scroll = useRef<ScrollViewInstance>(null);
   const dayW = width > 0 ? (width - AXIS_W) / Math.min(days, VISIBLE_DAYS) : 0;
@@ -44,8 +43,7 @@ export function SocChart({ start, days, normal, winter }: Props) {
   return (
     <View style={{ gap: Spacing.two }}>
       <View style={styles.legend}>
-        <LegendLine color={Colors.ev} text="ふだん" width={3} />
-        <LegendLine color={Colors.navy} text="冬" dashed width={2} />
+        <LegendLine color={Colors.ev} text="電池の残り" width={3} />
         <LegendLine color={Colors.warn} text={`安心ライン ${SAFE_SOC}%`} dashed width={2} />
       </View>
 
@@ -53,7 +51,7 @@ export function SocChart({ start, days, normal, winter }: Props) {
         style={styles.chartRow}
         onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
         accessible
-        accessibilityLabel={`電池の残りのグラフ。いちばん少ないとき、ふだん${minOf(normal)}%、冬${minOf(winter)}%`}>
+        accessibilityLabel={`電池の残りのグラフ。いちばん少ないとき${minOf(normal)}%`}>
         {/* 目盛り（%） */}
         <View style={[styles.axis, { height: PAD_TOP + H + 30 }]}>
           {TICKS.map((v) => (
@@ -93,7 +91,6 @@ export function SocChart({ start, days, normal, winter }: Props) {
                   strokeWidth={2}
                   strokeDasharray="6 4"
                 />
-                <Polyline points={toPoints(winter)} fill="none" stroke={Colors.navy} strokeWidth={2} strokeDasharray="5 4" strokeLinejoin="round" />
                 <Polyline points={toPoints(normal)} fill="none" stroke={Colors.ev} strokeWidth={3} strokeLinejoin="round" />
               </Svg>
               {/* 日付 */}

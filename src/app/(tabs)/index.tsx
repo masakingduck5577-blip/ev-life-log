@@ -30,7 +30,7 @@ export default function RecordScreen() {
   const progress = getProgress(snapshot, now);
   const result = useAnalysis();
   const openDevSettings = useHiddenTap(() => router.push('/dev'));
-  const { startedAt, answers, carType } = snapshot;
+  const { answers, carType } = snapshot;
   const a = result?.analysis;
   const ownEv = carType === 'ownEv';
   const recording = progress.status === 'recording';
@@ -38,10 +38,7 @@ export default function RecordScreen() {
   const hasCarTrips = !!a && a.carTripCount > 0;
 
   return (
-    <Screen
-      title="記録"
-      lead="ふだん通りに過ごすと、車での移動を記録して、EVだったらどうなるかを見せます。"
-      onTitlePress={openDevSettings}>
+    <Screen title="記録" onTitlePress={openDevSettings}>
       {!snapshot.ready ? (
         <Section title="記録中の状態">
           <ThemedText color="sub">読み込んでいます</ThemedText>
@@ -52,16 +49,27 @@ export default function RecordScreen() {
         </Section>
       ) : (
         <>
-          {/* EVだったらの結果（いちばん上） */}
+          {/* 記録の状態（いちばん上。距離と回数だけ） */}
+          <Section title={recording ? '記録中' : '記録を止めました'}>
+            <StatRow>
+              <StatTile label="走った距離" value={formatKm(a?.carKm ?? 0)} />
+              <StatTile label="運転の回数" value={`${a?.carTripCount ?? 0}回`} />
+            </StatRow>
+            {snapshot.error ? (
+              <InfoBox tone="warn" title="うまく動いていません">
+                {snapshot.error}
+              </InfoBox>
+            ) : null}
+          </Section>
+
+          {/* EVだったらの結果 */}
           {result && hasCarTrips ? (
             <>
               {ownEv ? <OwnCostSection result={result} /> : <EvVerdictSection result={result} />}
-              <BatterySection result={result} ownEv={ownEv} />
+              <BatterySection result={result} />
             </>
           ) : (
-            <InfoBox title="車での移動が記録されると、ここに結果が出ます">
-              EVだったらどうなるか、電池の残りのグラフで見られます。
-            </InfoBox>
+            <InfoBox>車での移動が記録されると、ここに結果が出ます。</InfoBox>
           )}
 
           {/* 本人に確かめること（結果に関わる） */}
@@ -99,34 +107,6 @@ export default function RecordScreen() {
             </InfoBox>
           ) : null}
 
-          {/* 記録の状態 */}
-          <Section title={recording ? '記録中' : '記録を止めました'}>
-            <ThemedText color="sub">
-              {startedAt != null ? `${formatDate(startedAt)}から` : ''}
-              {progress.days}日間の記録
-              {recording ? `（${formatTime(now)} 現在）` : ''}
-            </ThemedText>
-            {a ? (
-              <StatRow>
-                <StatTile label="走った距離" value={formatKm(a.carKm)} />
-                <StatTile label="運転の回数" value={`${a.carTripCount}回`} />
-              </StatRow>
-            ) : null}
-            {recording ? (
-              <ThemedText type="note" color="sub">
-                止めるまで記録を続けます。記録した日が増えるほど、結果がたしかになります。
-              </ThemedText>
-            ) : null}
-            {snapshot.mode === 'device' && recording ? (
-              <Button label="記録を止める" variant="secondary" onPress={() => void actions.stopDeviceRecording()} />
-            ) : null}
-            {snapshot.error ? (
-              <InfoBox tone="warn" title="うまく動いていません">
-                {snapshot.error}
-              </InfoBox>
-            ) : null}
-          </Section>
-
           {result && hasCarTrips ? (
             <>
               {!ownEv ? <DifferenceSection result={result} /> : null}
@@ -159,7 +139,7 @@ export default function RecordScreen() {
           ) : null}
 
           {/* 1日の記録（新しい日から） */}
-          <Section title="1日の記録" description="日付を押すと、運転・地図・電池の残りを見られます。">
+          <Section title="1日の記録">
             <View role="list">
               {(a?.days ?? [])
                 .map((d, i) => ({ d, battery: a?.ev.normal.days[i] }))
@@ -202,6 +182,9 @@ export default function RecordScreen() {
       )}
 
       <Button label="設定を変える" variant="secondary" onPress={() => router.push('/settings')} />
+      {snapshot.mode === 'device' && recording ? (
+        <Button label="記録を止める" variant="secondary" onPress={() => void actions.stopDeviceRecording()} />
+      ) : null}
       {__DEV__ ? (
         <Button label="開発用の設定" variant="secondary" onPress={() => router.push('/dev')} />
       ) : null}

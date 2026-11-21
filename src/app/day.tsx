@@ -40,7 +40,6 @@ export default function DayScreen() {
   }
 
   const battery = result.analysis.ev.normal.days[dayIndex];
-  const winter = result.analysis.ev.winter.days[dayIndex];
   const spots = spotsNearRoute(day.carTrips).slice(0, 30);
   const chargerStops = a.chargerStops.filter((c) => c.stop.start >= dayStart && c.stop.start < dayStart + 86400000);
   const homeCharge = result.evInput.homeEnv !== 'none';
@@ -73,7 +72,6 @@ export default function DayScreen() {
           start={dayStart}
           days={1}
           normal={sliceTrace(result.analysis.ev.normal.trace, dayStart, dayStart + DAY_MS)}
-          winter={sliceTrace(result.analysis.ev.winter.trace, dayStart, dayStart + DAY_MS)}
         />
         <StatRow>
           <StatTile
@@ -83,7 +81,6 @@ export default function DayScreen() {
           <StatTile
             label="いちばん少ないとき"
             value={`${Math.round(battery.minSoc)}%`}
-            note={`冬なら ${Math.round(winter.minSoc)}%`}
           />
         </StatRow>
       </Section>
