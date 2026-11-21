@@ -1,36 +1,88 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { View } from 'react-native';
 
-import { Button } from '@/components/button';
+import { Button, Choice } from '@/components/button';
+import { CityPicker } from '@/components/city-picker';
 import { Screen } from '@/components/screen';
 import { SettingsForm } from '@/components/settings-form';
 import { ThemedText } from '@/components/themed-text';
+import { Spacing } from '@/constants/theme';
 import type { CarType } from '@/recording/engine';
 import { useRecording, useRecordingActions } from '@/recording/recording-context';
 
-const CAR_TYPES: CarType[] = ['gas', 'loanerEv', 'ownEv'];
+const CAR_TYPES: { value: CarType; title: string; description: string }[] = [
+  {
+    value: 'gas',
+    title: 'ガソリン車（今乗っている車）',
+    description: 'ふだんの運転を、EVに置き換えて計算します。',
+  },
+  {
+    value: 'loanerEv',
+    title: 'お店の代車・レンタカーのEV',
+    description: '実際のEVの電費で計算します。点検で代車を借りたときなどに。',
+  },
+  {
+    value: 'ownEv',
+    title: 'EV（自分の車）',
+    description: 'ふだんの充電代を、記録から出します。',
+  },
+];
 
-/** 2. 初期設定（EVに乗っている人は E1 の設定） */
+/** 2. はじめの入力：車の種類・住んでいる市区町村・燃費・自宅の充電 → 記録を始める */
 export default function SetupScreen() {
-  const { car } = useLocalSearchParams<{ car?: string }>();
-  const carType: CarType = CAR_TYPES.includes(car as CarType) ? (car as CarType) : 'gas';
-  const { settings } = useRecording();
+  const { settings, carType: savedCar } = useRecording();
   const actions = useRecordingActions();
+  const [car, setCar] = useState<CarType>(savedCar ?? 'gas');
+  const [busy, setBusy] = useState(false);
+
+  const start = async () => {
+    setBusy(true);
+    try {
+      await actions.completeOnboarding(car);
+      router.replace('/');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <Screen
-      title={carType === 'ownEv' ? 'EVと電気代の設定' : '初期設定'}
-      lead="あとから記録タブで変えられます。"
+      title="あなたの車と住まい"
+      lead="計算に使います。分からないところはそのままで始められ、あとから設定で変えられます。"
       back
-      footer={
-        <Button
-          label="次へ"
-          onPress={() => router.push({ pathname: '/onboarding/location', params: { car: carType } })}
+      footer={<Button label="記録を始める" disabled={busy} onPress={() => void start()} />}>
+      <View style={{ gap: Spacing.two }} role="radiogroup" aria-label="今乗っている車">
+        <ThemedText type="heading">今乗っている車</ThemedText>
+        {CAR_TYPES.map((c) => (
+          <Choice
+            key={c.value}
+            title={c.title}
+            description={c.description}
+            selected={car === c.value}
+            onPress={() => setCar(c.value)}
+          />
+        ))}
+      </View>
+
+      <View style={{ marginTop: Spacing.three }}>
+        <CityPicker value={settings.city} onChange={(city) => void actions.updateSettings({ city })} />
+      </View>
+
+      <View style={{ marginTop: Spacing.three }}>
+        <SettingsForm
+          compact
+          carType={car}
+          value={settings}
+          onChange={(p) => void actions.updateSettings(p)}
         />
-      }>
-      <ThemedText type="note" color="sub">
-        2 / 4
-      </ThemedText>
-      <SettingsForm carType={carType} value={settings} onChange={(p) => void actions.updateSettings(p)} />
+      </View>
+
+      {car === 'ownEv' ? (
+        <ThemedText type="note" color="sub">
+          乗っているEVの車種と電気料金は、始めたあとに「設定」で選べます。
+        </ThemedText>
+      ) : null}
     </Screen>
   );
 }

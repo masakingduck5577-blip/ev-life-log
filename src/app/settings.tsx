@@ -1,6 +1,7 @@
 import { View } from 'react-native';
 
 import { Choice } from '@/components/button';
+import { CityPicker } from '@/components/city-picker';
 import { Screen, Section } from '@/components/screen';
 import { SettingsForm } from '@/components/settings-form';
 import { Spacing } from '@/constants/theme';
@@ -28,6 +29,7 @@ export default function SettingsScreen() {
           ))}
         </View>
       </Section>
+      <CityPicker value={settings.city} onChange={(city) => void actions.updateSettings({ city })} />
       <SettingsForm carType={car} value={settings} onChange={(p) => void actions.updateSettings(p)} />
     </Screen>
   );

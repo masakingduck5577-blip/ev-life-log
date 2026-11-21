@@ -43,6 +43,8 @@ export type UserSettings = {
   elecPrice: number;
   /** 外で使う充電サービス */
   publicService: 'hondaCharge' | 'emp' | 'dealerFree' | 'none';
+  /** 住んでいる市区町村（栃木県の市町、または「栃木県の外」）。null はまだ選んでいない */
+  city: string | null;
 };
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -52,6 +54,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   elecPlan: 'normal',
   elecPrice: PARAMS.homeKwhPrice,
   publicService: 'none',
+  city: null,
 };
 
 export const RECORDING_DAYS = 7;

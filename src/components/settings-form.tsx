@@ -31,29 +31,33 @@ type Props = {
   carType: CarType;
   value: UserSettings;
   onChange: (patch: Partial<UserSettings>) => void;
+  /** はじめの入力：燃費と自宅の充電だけにする（EVや電気料金は、あとで設定画面で選ぶ） */
+  compact?: boolean;
 };
 
-/** 初期設定（はじめての画面の2つ目）と、EVに乗っている人の設定（E1） */
-export function SettingsForm({ carType, value, onChange }: Props) {
+/** 初期設定（はじめの2つ目の画面）と、設定画面（EVに乗っている人の E1 を含む） */
+export function SettingsForm({ carType, value, onChange, compact }: Props) {
   const ev = EVS[value.evKey];
   const rival = ev ? GASES[ev.rival] : undefined;
   const ownEv = carType === 'ownEv';
 
   return (
     <View style={styles.form}>
-      <Group
-        title={ownEv ? '乗っているEV' : carType === 'loanerEv' ? '借りているEV' : '検討中のEV'}
-        hint={ownEv ? undefined : '分からなければ、そのままでかまいません。'}>
-        {Object.entries(EVS).map(([key, e]) => (
-          <Choice
-            key={key}
-            title={e.name}
-            description={`${e.category}・電池 ${e.batteryKwh}kWh・カタログで約${e.rangeKm}km${e.verified ? '' : '（値は仮）'}`}
-            selected={value.evKey === key}
-            onPress={() => onChange({ evKey: key })}
-          />
-        ))}
-      </Group>
+      {!compact ? (
+        <Group
+          title={ownEv ? '乗っているEV' : carType === 'loanerEv' ? '借りているEV' : '検討中のEV'}
+          hint={ownEv ? undefined : '分からなければ、そのままでかまいません。'}>
+          {Object.entries(EVS).map(([key, e]) => (
+            <Choice
+              key={key}
+              title={e.name}
+              description={`${e.category}・電池 ${e.batteryKwh}kWh・カタログで約${e.rangeKm}km${e.verified ? '' : '（値は仮）'}`}
+              selected={value.evKey === key}
+              onPress={() => onChange({ evKey: key })}
+            />
+          ))}
+        </Group>
+      ) : null}
 
       {!ownEv ? (
         <Group title="今の車の燃費" hint="分からなければ、同じクラスの車のカタログ値で計算します。">
@@ -84,7 +88,7 @@ export function SettingsForm({ carType, value, onChange }: Props) {
         ))}
       </Group>
 
-      {ownEv ? (
+      {ownEv && !compact ? (
         <>
           <Group title="家の電気料金" hint="分からなければ「ふつうのプラン」で計算します。検針票に単価が書いてあります。">
             <Choice
