@@ -2,6 +2,7 @@ import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 
 import { DEVICE_DATASET } from '@/recording/datasets';
+import { onPointsRecorded } from '@/recording/reminders';
 import { getStore } from '@/storage/store';
 
 import type { LocationPermission, LocationPoint, LocationSource, PointsListener } from './source';
@@ -36,6 +37,8 @@ if (!TaskManager.isTaskDefined(LOCATION_TASK)) {
       if (error || !data?.locations?.length) return;
       const points = data.locations.map(toPoint);
       await getStore().addPoints(DEVICE_DATASET, points);
+      // 記録のある日が増えたら、「記録がない日」のお知らせを先へ延ばす
+      await onPointsRecorded(Date.parse(points[points.length - 1].t));
       listeners.forEach((l) => l(points));
     },
   );

@@ -11,12 +11,13 @@ import {
 import type { Answers, ChargeAnswer } from '@/analysis/analyze';
 import type { HomeEnv } from '@/analysis/ev';
 import { DEFAULT_EV, PARAMS } from '@/data/simulator';
-import { jstDayNumber, jstMidnight } from '@/lib/format';
+import { jstMidnight } from '@/lib/format';
 import { createReplaySource, type ReplaySource } from '@/location/replay';
 import { createDeviceSource, type LocationPoint, type LocationSource } from '@/location/source';
 import { getStore } from '@/storage/store';
 
 import { DEVICE_DATASET, testDataset } from './datasets';
+import { startReminders, stopReminders } from './reminders';
 import { DEFAULT_SCENARIO, getScenario, type ScenarioId } from './scenarios';
 
 /**
@@ -57,7 +58,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   city: null,
 };
 
-export const RECORDING_DAYS = 7;
+/** テストデータの日数（記録そのものは、止めるまで何日でも続ける） */
+export const TEST_DATA_DAYS = 7;
 /** テストデータの「最初から」「○日目へ」で始める時刻（朝6時） */
 const DAY_START_OFFSET = 6 * 60 * 60 * 1000;
 
@@ -71,15 +73,14 @@ export type RecordingSnapshot = {
   scenarioId: ScenarioId;
   speed: PlaybackSpeed;
   clock: Clock;
-  /** 記録の始まりと終わり（ミリ秒）。まだ始めていなければ null */
+  /** 記録の始まり（ミリ秒）。まだ始めていなければ null */
   startedAt: number | null;
+  /** テストデータの終わり（ミリ秒）。スマホの記録には終わりがないので null */
   endsAt: number | null;
   /** 途中で止めた時刻 */
   stoppedAt: number | null;
   pointCount: number;
   lastPoint: LocationPoint | null;
-  /** 1日目〜7日目の点の数 */
-  dayCounts: number[];
   settings: UserSettings;
   /** 本人の答え（家の確認・電車かバスか・充電したか）。データの組ごと */
   answers: Answers;
@@ -102,19 +103,8 @@ type SavedTestClock = { scenarioId: ScenarioId; simTime: number; speed: Playback
 
 const IS_WEB = Platform.OS === 'web';
 
-function endOfRecording(startedAt: number) {
-  return jstMidnight(startedAt) + RECORDING_DAYS * DAY_MS;
-}
-
-function countByDay(points: LocationPoint[], startedAt: number | null): number[] {
-  const counts = new Array(RECORDING_DAYS).fill(0);
-  if (startedAt == null) return counts;
-  const first = jstDayNumber(startedAt);
-  for (const p of points) {
-    const i = jstDayNumber(Date.parse(p.t)) - first;
-    if (i >= 0 && i < RECORDING_DAYS) counts[i]++;
-  }
-  return counts;
+function endOfTestData(start: number) {
+  return jstMidnight(start) + TEST_DATA_DAYS * DAY_MS;
 }
 
 class RecordingEngine {
@@ -135,7 +125,6 @@ class RecordingEngine {
     stoppedAt: null,
     pointCount: 0,
     lastPoint: null,
-    dayCounts: new Array(RECORDING_DAYS).fill(0),
     settings: DEFAULT_SETTINGS,
     answers: {},
     error: null,
@@ -235,7 +224,7 @@ class RecordingEngine {
     this.data = scenario.load!();
 
     const start = Date.parse(scenario.start);
-    const end = endOfRecording(start);
+    const end = endOfTestData(start);
     const saved = await this.store.getSetting<SavedTestClock>(KEYS.testClock);
     const resume = saved && saved.scenarioId === scenario.id ? saved : null;
     const speed: PlaybackSpeed = resume?.speed ?? 60;
@@ -280,7 +269,6 @@ class RecordingEngine {
     this.set({
       pointCount: upTo.length,
       lastPoint: upTo.length ? upTo[upTo.length - 1] : null,
-      dayCounts: countByDay(upTo, this.snapshot.startedAt),
     });
     this.saveTestClock(true);
   }
@@ -311,7 +299,6 @@ class RecordingEngine {
     this.source = createDeviceSource();
     this.unsubscribeSource =
       this.source?.subscribe((batch) => void this.onPoints(batch, false)) ?? null;
-    this.unsubscribeClock = this.realClock.subscribe(() => void this.checkDeviceEnd());
 
     const points = await this.store.getPoints(DEVICE_DATASET);
     this.points = points;
@@ -319,22 +306,15 @@ class RecordingEngine {
       clock: this.realClock,
       speed: 1,
       startedAt,
-      endsAt: startedAt != null ? endOfRecording(startedAt) : null,
+      endsAt: null,
       stoppedAt,
       pointCount: points.length,
       lastPoint: points.length ? points[points.length - 1] : null,
-      dayCounts: countByDay(points, startedAt),
     });
     // 記録中なら、取得が動いているか確かめる（アプリを入れ直したときなど）
-    if (startedAt != null && stoppedAt == null && Date.now() < endOfRecording(startedAt)) {
+    if (startedAt != null && stoppedAt == null) {
       await this.source?.start().catch((e) => this.set({ error: String(e) }));
     }
-  }
-
-  private async checkDeviceEnd() {
-    const { endsAt, stoppedAt, mode } = this.snapshot;
-    if (mode !== 'device' || endsAt == null || stoppedAt != null) return;
-    if (this.realClock.now() >= endsAt) await this.source?.stop();
   }
 
   private async startDeviceRecording() {
@@ -345,12 +325,12 @@ class RecordingEngine {
     this.points = [];
     this.set({
       startedAt,
-      endsAt: endOfRecording(startedAt),
+      endsAt: null,
       stoppedAt: null,
       pointCount: 0,
       lastPoint: null,
-      dayCounts: countByDay([], startedAt),
     });
+    await startReminders(startedAt);
     try {
       await this.source?.start();
     } catch (e) {
@@ -363,12 +343,9 @@ class RecordingEngine {
     // スマホの点は、バックグラウンドのタスクがすでに保存している
     if (save) await this.store.addPoints(this.dataset, batch);
     this.points = this.points.concat(batch);
-    const { startedAt, dayCounts, pointCount } = this.snapshot;
-    const added = countByDay(batch, startedAt);
     this.set({
-      pointCount: pointCount + batch.length,
+      pointCount: this.snapshot.pointCount + batch.length,
       lastPoint: batch[batch.length - 1],
-      dayCounts: dayCounts.map((n, i) => n + added[i]),
     });
   }
 
@@ -395,17 +372,19 @@ class RecordingEngine {
       await this.rebuildTestPoints(Date.parse(getScenario(this.snapshot.scenarioId).start) + DAY_START_OFFSET);
     } else {
       await this.source?.stop();
+      await stopReminders();
       await this.store.removeSetting(KEYS.deviceStartedAt);
       await this.store.removeSetting(KEYS.deviceStoppedAt);
       await this.store.clearPoints(DEVICE_DATASET);
       this.points = [];
-      this.set({ startedAt: null, endsAt: null, stoppedAt: null, pointCount: 0, lastPoint: null, dayCounts: countByDay([], null) });
+      this.set({ startedAt: null, endsAt: null, stoppedAt: null, pointCount: 0, lastPoint: null });
     }
   }
 
   async stopDeviceRecording() {
     if (this.snapshot.mode !== 'device') return;
     await this.source?.stop();
+    await stopReminders();
     const stoppedAt = Date.now();
     await this.store.setSetting(KEYS.deviceStoppedAt, stoppedAt);
     this.set({ stoppedAt });
@@ -480,7 +459,7 @@ class RecordingEngine {
     this.saveTestClock(true);
   }
 
-  /** ○日目（1〜7）の朝6時へ */
+  /** テストデータの○日目（1〜7）の朝6時へ */
   async jumpToDay(day: number) {
     const { startedAt } = this.snapshot;
     if (!this.simClock || startedAt == null) return;
@@ -489,7 +468,7 @@ class RecordingEngine {
     if (this.snapshot.onboarded) await this.play();
   }
 
-  /** 7日目の終わりへ（結果が出る状態にする） */
+  /** テストデータの終わりへ */
   async jumpToEnd() {
     const { endsAt } = this.snapshot;
     if (!this.simClock || endsAt == null) return;

@@ -1,5 +1,5 @@
 /**
- * 「あなたの1週間がEVだったら」の計算（仮）。式と値は Web 版シミュレーターに合わせる。
+ * 「記録した日々がEVだったら」の計算（仮）。記録した日数は何日でもよい。式と値は Web 版シミュレーターに合わせる。
  *
  * - 電費：カタログ値 ÷ 実際の係数（0.9）÷ 季節の係数（夏0.9・冬0.7・春秋1）
  * - 電池は90%まで充電する想定。安心ラインは20%
@@ -51,10 +51,14 @@ export type DayBattery = {
   publicCharges: number;
 };
 
+/** 電池の残りの移り変わり（グラフ用）。時刻の順 */
+export type SocPoint = { t: number; soc: number };
+
 export type SeasonResult = {
   season: Season;
   factor: number;
   days: DayBattery[];
+  trace: SocPoint[];
   minSoc: number;
   usedKwh: number;
   homeKwh: number;
@@ -68,14 +72,18 @@ export type EvResult = {
   evKey: string;
   gasName: string;
   gasKmPerL: number;
-  weekKm: number;
+  /** 記録した日数 */
+  days: number;
+  /** 記録した日数で走った距離 */
+  totalKm: number;
+  /** 1日の平均 × 365 */
   yearKm: number;
   normal: SeasonResult;
   winter: SeasonResult;
-  /** 1週間の費用（円） */
+  /** 記録した日数の費用（円） */
   cost: { gas: number; ev: number; evHome: number; evPublic: number; gasLiters: number };
-  /** 外で充電する回数（週あたり、ならした値） */
-  publicPerWeek: { normal: number; winter: number };
+  /** 記録した日数で、外で充電する回数（家で充電できない人は、ならした値） */
+  publicCount: { normal: number; winter: number };
   /** 判定の1行 */
   verdict: { level: 'ok' | 'winter' | 'public'; text: string };
 };
@@ -98,15 +106,16 @@ function simulate(
   stops: Stop[],
   homeCharge: boolean,
   factor: number,
-  weekStart: number,
+  periodStart: number,
   days: number,
   season: Season,
+  until: number,
 ): SeasonResult {
   const cap = ev.batteryKwh;
   const perKm = whPerKm(ev, factor) / 1000; // kWh/km
   let soc = FULL_SOC;
   const daysOut: DayBattery[] = Array.from({ length: days }, (_, i) => ({
-    dayStart: weekStart + i * DAY_MS,
+    dayStart: periodStart + i * DAY_MS,
     startSoc: NaN,
     minSoc: Infinity,
     endSoc: NaN,
@@ -120,6 +129,8 @@ function simulate(
   let publicKwh = 0;
   let homeKwh = 0;
   let homeCharges = 0;
+  const trace: SocPoint[] = [{ t: periodStart, soc }];
+  const mark = (t: number) => trace.push({ t, soc });
 
   type Ev = { t: number; trip?: Trip; stop?: Stop };
   const events: Ev[] = [
@@ -133,7 +144,7 @@ function simulate(
     const d = daysOut[di];
     d.startSoc = soc;
     d.minSoc = soc;
-    const dayEnd = weekStart + (di + 1) * DAY_MS;
+    const dayEnd = periodStart + (di + 1) * DAY_MS;
     for (; k < events.length && (events[k].t < dayEnd || di === days - 1); k++) {
       step(events[k], d);
     }
@@ -144,13 +155,16 @@ function simulate(
     if (e.trip) {
       const need = e.trip.distanceKm * perKm;
       // 安心ラインを下回りそうなら、先に外で急速充電
+      mark(e.trip.start);
       if (soc - (need / cap) * 100 < SAFE_SOC) {
         const add = Math.max(0, ((PUBLIC_TARGET_SOC - soc) / 100) * cap);
         soc += (add / cap) * 100;
         publicKwh += add;
         d.publicCharges++;
+        mark(e.trip.start);
       }
       soc -= (need / cap) * 100;
+      mark(e.trip.end);
       d.km += e.trip.distanceKm;
       d.usedKwh += need;
       d.minSoc = Math.min(d.minSoc, soc);
@@ -161,7 +175,10 @@ function simulate(
       d.homeChargeableKwh += hours * HOME_CHARGE_KW;
       if (homeCharge && e.stop.durationMin >= HOME_MIN_PARK_MIN && soc < FULL_SOC) {
         const add = Math.min(hours * HOME_CHARGE_KW, ((FULL_SOC - soc) / 100) * cap);
+        mark(e.stop.start);
         soc += (add / cap) * 100;
+        // 充電にかかった時間のあとに、増えた残りを置く
+        mark(e.stop.start + (add / HOME_CHARGE_KW) * 3600000);
         homeKwh += add;
         d.homeChargedKwh += add;
         homeCharges++;
@@ -169,11 +186,13 @@ function simulate(
     }
   }
 
+  mark(Math.max(until, trace[trace.length - 1].t));
   const publicCharges = daysOut.reduce((s, d) => s + d.publicCharges, 0);
   return {
     season,
     factor,
     days: daysOut,
+    trace,
     minSoc: Math.min(...daysOut.map((d) => d.minSoc)),
     usedKwh: daysOut.reduce((s, d) => s + d.usedKwh, 0),
     homeKwh,
@@ -187,33 +206,34 @@ export function calcEv(
   input: EvInput,
   trips: Trip[],
   stops: Stop[],
-  weekStart: number,
+  periodStart: number,
   days: number,
+  until: number,
 ): EvResult {
   const ev = EVS[input.evKey] ?? EVS['n-one-e'];
   const gas = GASES[ev.rival] ?? Object.values(GASES)[0];
   const gasKmPerL = input.gasKmPerL && input.gasKmPerL > 0 ? input.gasKmPerL : gas.kmPerL;
   const homeCharge = input.homeEnv !== 'none';
-  const start = jstMidnight(weekStart);
-  const factor = seasonFactorFor(weekStart);
+  const start = jstMidnight(periodStart);
+  const factor = seasonFactorFor(periodStart);
 
-  const normal = simulate(ev, trips, stops, homeCharge, factor, start, days, 'normal');
-  const winter = simulate(ev, trips, stops, homeCharge, PARAMS.winterFactor, start, days, 'winter');
+  const normal = simulate(ev, trips, stops, homeCharge, factor, start, days, 'normal', until);
+  const winter = simulate(ev, trips, stops, homeCharge, PARAMS.winterFactor, start, days, 'winter', until);
 
-  const weekKm = trips.filter((t) => t.kind === 'car').reduce((s, t) => s + t.distanceKm, 0);
+  const totalKm = trips.filter((t) => t.kind === 'car').reduce((s, t) => s + t.distanceKm, 0);
   // 走った分の電気を、家と外のどちらで入れたか（家の充電が足りない分は外）
   const used = normal.usedKwh;
   const fromPublic = homeCharge ? Math.min(used, normal.publicKwh) : used;
   const fromHome = used - fromPublic;
   const evHome = fromHome * input.homePrice;
   const evPublic = fromPublic * input.publicPrice;
-  const gasLiters = weekKm / (gasKmPerL * PARAMS.gasRealFactor);
+  const gasLiters = totalKm / (gasKmPerL * PARAMS.gasRealFactor);
   const gasCost = gasLiters * PARAMS.gasPrice;
 
-  // 外で充電する回数（週あたり）。家で充電できない人は、使った電気をすべて外で入れる
+  // 外で充電する回数。家で充電できない人は、使った電気をすべて外で入れる
   // （1回で 安心ライン20% → 80% まで入れるとして、ならした回数）
   const perCharge = (ev.batteryKwh * (PUBLIC_TARGET_SOC - SAFE_SOC)) / 100;
-  const publicPerWeek = {
+  const publicCount = {
     normal: homeCharge ? normal.publicCharges : normal.usedKwh / perCharge,
     winter: homeCharge ? winter.publicCharges : winter.usedKwh / perCharge,
   };
@@ -222,12 +242,12 @@ export function calcEv(
   if (!homeCharge) {
     verdict = {
       level: 'public',
-      text: `家で充電できないので、外での充電が週に約${formatTimes(publicPerWeek.normal)}必要です`,
+      text: `家で充電できないので、${days}日間で外での充電が約${formatTimes(publicCount.normal)}必要です`,
     };
   } else if (normal.publicCharges > 0) {
     verdict = {
       level: 'public',
-      text: `外での充電が週に${normal.publicCharges}回ほど必要です`,
+      text: `${days}日間で、外での充電が${normal.publicCharges}回必要です`,
     };
   } else if (winter.publicCharges > 0 || winter.minSoc < SAFE_SOC) {
     verdict = {
@@ -243,12 +263,13 @@ export function calcEv(
     evKey: input.evKey,
     gasName: gas.name,
     gasKmPerL,
-    weekKm,
-    yearKm: weekKm * 52,
+    days,
+    totalKm,
+    yearKm: (totalKm / days) * 365,
     normal,
     winter,
     cost: { gas: gasCost, ev: evHome + evPublic, evHome, evPublic, gasLiters },
-    publicPerWeek,
+    publicCount,
     verdict,
   };
 }
@@ -257,6 +278,3 @@ export function calcEv(
 export function formatTimes(n: number): string {
   return n >= 10 || Number.isInteger(n) ? `${Math.round(n)}回` : `${n.toFixed(1)}回`;
 }
-
-/** 1週間 → 1か月（30日） */
-export const perMonth = (week: number) => (week * 30) / 7;

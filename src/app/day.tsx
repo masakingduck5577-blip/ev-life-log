@@ -9,9 +9,11 @@ import { InfoBox } from '@/components/info-box';
 import { chargerKindLabel, chargerMarker, TRIP_LABEL } from '@/components/labels';
 import { StatRow, StatTile } from '@/components/link-row';
 import { RouteMap, type MapMarker } from '@/components/route-map';
+import { SocChart, sliceTrace } from '@/components/soc-chart';
 import { Screen, Section } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, MinTouch, Radius, Spacing } from '@/constants/theme';
+import { DAY_MS } from '@/lib/clock';
 import { formatDate, formatDuration, formatKm, formatTime, fromDateKey } from '@/lib/format';
 import { useRecording, useRecordingActions } from '@/recording/recording-context';
 import { useAnalysis } from '@/recording/use-analysis';
@@ -45,13 +47,6 @@ export default function DayScreen() {
 
   const markers: MapMarker[] = [
     ...spots.map((s) => chargerMarker(s.charger, `通った道から約${Math.round(s.nearestM)}m`)),
-    ...day.waits.map((w) => ({
-      id: `wait-${w.id}`,
-      kind: 'stop' as const,
-      lat: w.place.lat,
-      lng: w.place.lng,
-      title: `${formatTime(w.start)}から${formatDuration(w.durationMin)}待っていた`,
-    })),
     ...(a.home ? [{ id: 'home', kind: 'home' as const, lat: a.home.lat, lng: a.home.lng, title: '家' }] : []),
   ];
 
@@ -65,18 +60,33 @@ export default function DayScreen() {
         markers={markers}
       />
       <ThemedText type="note" color="sub">
-        青い線：車／灰色の点線：電車・バス。印：家・急（急速）・普（普通）・H（Honda Charge）・●（待っていた場所）
+        青い線：車／灰色の点線：電車・バス。印：家・急（急速）・普（普通）・H（Honda Charge）
       </ThemedText>
 
       <StatRow>
-        <StatTile label="走った距離" value={formatKm(day.carKm)} note={`車 ${day.carTrips.length}回`} />
-        <StatTile
-          label="電池の残り（EVだったら）"
-          value={`${Math.round(battery.startSoc)}% → ${Math.round(battery.endSoc)}%`}
-          note={`いちばん少ないとき ${Math.round(battery.minSoc)}%（冬 ${Math.round(winter.minSoc)}%）`}
-        />
-        <StatTile label="待っていた時間" value={formatDuration(day.waitMin)} />
+        <StatTile label="走った距離" value={formatKm(day.carKm)} />
+        <StatTile label="運転の回数" value={`${day.carTrips.length}回`} />
       </StatRow>
+
+      <Section title={carType === 'ownEv' ? '電池の残り' : '電池の残り（EVだったら）'}>
+        <SocChart
+          start={dayStart}
+          days={1}
+          normal={sliceTrace(result.analysis.ev.normal.trace, dayStart, dayStart + DAY_MS)}
+          winter={sliceTrace(result.analysis.ev.winter.trace, dayStart, dayStart + DAY_MS)}
+        />
+        <StatRow>
+          <StatTile
+            label="朝 → 夜"
+            value={`${Math.round(battery.startSoc)}% → ${Math.round(battery.endSoc)}%`}
+          />
+          <StatTile
+            label="いちばん少ないとき"
+            value={`${Math.round(battery.minSoc)}%`}
+            note={`冬なら ${Math.round(winter.minSoc)}%`}
+          />
+        </StatRow>
+      </Section>
 
       {a.home ? (
         <Section title="家に止めていた時間">
@@ -130,19 +140,6 @@ export default function DayScreen() {
           );
         })}
       </Section>
-
-      {day.waits.length ? (
-        <Section title="止まって待っていた時間" description="車で来て、歩かずに5〜30分止まっていたところ（お迎えなど）。">
-          {day.waits.map((w) => (
-            <ThemedText key={w.id}>
-              {formatTime(w.start)}から {formatDuration(w.durationMin)}
-            </ThemedText>
-          ))}
-          <ThemedText type="note" color="sub">
-            EVなら、エンジンをかけずにエアコンを使って静かに待てます。
-          </ThemedText>
-        </Section>
-      ) : null}
 
       {carType === 'ownEv' && chargerStops.length ? (
         <Section title="充電スポットに止まりました">

@@ -10,8 +10,8 @@ import type { EvInput } from '@/analysis/ev';
 import { PARAMS } from '@/data/simulator';
 import type { LocationPoint } from '@/location/source';
 
-import { getRecordingEngine, RECORDING_DAYS, type UserSettings } from './engine';
-import { useRecording } from './recording-context';
+import { getRecordingEngine, type UserSettings } from './engine';
+import { getProgress, useNow, useRecording } from './recording-context';
 
 export type AnalysisResult = {
   analysis: Analysis;
@@ -34,7 +34,10 @@ const same = (a: unknown[], b: unknown[]) => a.length === b.length && a.every((x
 /** 記録の分析（運転・止まった場所・EVの計算）。記録を始めていなければ null */
 export function useAnalysis(): AnalysisResult | null {
   const s = useRecording();
-  return computeAnalysis(s.pointCount, s.settings, s.answers, s.startedAt, s.lastPoint, s.ready);
+  const now = useNow(s.clock);
+  // 記録した日数が変わったときだけ計算し直す（毎秒はしない）
+  const { days } = getProgress(s, now);
+  return computeAnalysis(s.pointCount, s.settings, s.answers, s.startedAt, s.lastPoint, s.ready, days);
 }
 
 function computeAnalysis(
@@ -44,8 +47,9 @@ function computeAnalysis(
   startedAt: number | null,
   lastPoint: LocationPoint | null,
   ready: boolean,
+  days: number,
 ): AnalysisResult | null {
-  const key = [pointCount, settings, answers, startedAt, lastPoint, ready];
+  const key = [pointCount, settings, answers, startedAt, lastPoint, ready, days];
   if (cache && same(cache.key, key)) return cache.value;
 
   let value: AnalysisResult | null = null;
@@ -53,7 +57,7 @@ function computeAnalysis(
     const points = getRecordingEngine().getPoints();
     const evInput = toEvInput(settings);
     const until = lastPoint ? Date.parse(lastPoint.t) : startedAt;
-    const analysis = analyze(points, { startedAt, days: RECORDING_DAYS, until, evInput, answers });
+    const analysis = analyze(points, { startedAt, days, until, evInput, answers });
     value = { analysis, evInput, own: ownChargeCost(analysis, evInput, answers) };
   }
   cache = { key, value };

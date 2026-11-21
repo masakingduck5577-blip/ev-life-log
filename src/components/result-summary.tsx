@@ -1,92 +1,169 @@
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
-import { formatTimes, SAFE_SOC } from '@/analysis/ev';
+import { FULL_SOC, formatTimes, HOME_CHARGE_KW, SAFE_SOC, TANK_L } from '@/analysis/ev';
+import { InfoBox } from '@/components/info-box';
+import { Section } from '@/components/screen';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { formatKm, formatYen } from '@/lib/format';
+import { PARAMS } from '@/data/simulator';
+import { formatShortDate, formatYen, jstMidnight } from '@/lib/format';
 import type { AnalysisResult } from '@/recording/use-analysis';
 
 import { Icon } from './icon';
 import { LinkRow, StatRow, StatTile } from './link-row';
+import { SocChart } from './soc-chart';
 import { ThemedText } from './themed-text';
 
 /**
- * 5. 結果：判定と3つの数字だけを先に出し、詳しい内容は下の行から見る。
- * EVに乗っている人は、あなたの充電代（E3）を出す。
+ * 結果（記録タブにそのまま並べる）。記録した日数は何日でもよい。
+ * 1. EVだったら（判定・充電・費用） 2. 電池の残り 3. EVの違い 4. ほかの結果への入口
  */
-export function ResultSummary({ result, ownEv, partial }: { result: AnalysisResult; ownEv: boolean; partial: boolean }) {
-  const { analysis: a, own } = result;
-  const ev = a.ev;
+
+/** 1. EVだったら（ガソリン車・代車の人） */
+export function EvVerdictSection({ result }: { result: AnalysisResult }) {
+  const ev = result.analysis.ev;
   const homeCharge = result.evInput.homeEnv !== 'none';
   const diff = ev.cost.gas - ev.cost.ev;
-
-  if (ownEv) {
-    return (
-      <View style={styles.wrap}>
-        <ThemedText type="heading">あなたの充電代{partial ? '（ここまで）' : ''}</ThemedText>
-        <StatRow>
-          <StatTile label="1週間" value={formatYen(own.weekYen)} />
-          <StatTile label="1か月にすると" value={formatYen(own.monthYen)} />
-          <StatTile label="1kmあたり" value={`${own.perKmYen.toFixed(1)}円`} />
-        </StatRow>
-        <LinkRow title="あなたの充電代をくわしく" description="家・外の内訳、ガソリン車との比較、安くする方法" onPress={() => router.push('/result/charge-cost')} />
-        <LinkRow title="7日間の電池の残り" onPress={() => router.push('/result/battery')} />
-        <LinkRow title="通った道の充電スポット" onPress={() => router.push('/result/spots')} />
-      </View>
-    );
-  }
-
-  const levelIcon =
+  const level =
     ev.verdict.level === 'ok'
       ? ({ sf: 'checkmark.circle', md: 'check_circle', color: Colors.ok, bg: Colors.okTint } as const)
       : ({ sf: 'exclamationmark.triangle', md: 'warning', color: Colors.warn, bg: Colors.warnTint } as const);
 
   return (
-    <View style={styles.wrap}>
-      <View style={[styles.verdict, { backgroundColor: levelIcon.bg }]}>
-        <Icon sf={levelIcon.sf} md={levelIcon.md} size={26} color={levelIcon.color} />
-        <View style={{ flex: 1 }}>
-          <ThemedText type="note" color="sub">
-            {ev.ev.name}だったら{partial ? '（ここまでの記録で）' : ''}
-          </ThemedText>
-          <ThemedText type="heading" style={{ color: levelIcon.color }}>
-            {ev.verdict.text}
-          </ThemedText>
-        </View>
+    <Section title={`${ev.ev.name}だったら`} description={`記録した${ev.days}日間の運転で計算しました。`}>
+      <View style={[styles.verdict, { backgroundColor: level.bg }]}>
+        <Icon sf={level.sf} md={level.md} size={26} color={level.color} />
+        <ThemedText type="heading" style={{ flex: 1, color: level.color }}>
+          {ev.verdict.text}
+        </ThemedText>
       </View>
       <StatRow>
-        <StatTile label="走った距離" value={formatKm(a.carKm)} note={`運転 ${a.carTripCount}回`} />
         {homeCharge ? (
-          <StatTile label="家での充電" value={`${ev.normal.homeCharges}回`} note={`いちばん少ないとき ${Math.round(ev.normal.minSoc)}%`} />
+          <StatTile label="家での充電" value={`${ev.normal.homeCharges}回`} note={`外での充電 ${ev.normal.publicCharges}回`} />
         ) : (
-          <StatTile label="外での充電" value={`週に約${formatTimes(ev.publicPerWeek.normal)}`} note={`冬は約${formatTimes(ev.publicPerWeek.winter)}`} />
+          <StatTile label="外での充電" value={`約${formatTimes(ev.publicCount.normal)}`} note={`冬は約${formatTimes(ev.publicCount.winter)}`} />
         )}
         <StatTile
-          label="燃料代の差（1週間）"
+          label="燃料代の差"
           value={diff >= 0 ? `${formatYen(diff)}安い` : `${formatYen(-diff)}高い`}
           note={`ガソリン ${formatYen(ev.cost.gas)} → 電気 ${formatYen(ev.cost.ev)}`}
         />
       </StatRow>
-      {ev.normal.minSoc < SAFE_SOC ? (
-        <ThemedText type="note" color="warn">
-          電池の残りが安心ライン（{SAFE_SOC}%）を下回る日があります。
-        </ThemedText>
+    </Section>
+  );
+}
+
+/** 1. あなたの充電代（EVに乗っている人） */
+export function OwnCostSection({ result }: { result: AnalysisResult }) {
+  const { analysis: a, own } = result;
+  return (
+    <Section title="あなたの充電代" description={`記録した${a.ev.days}日間の運転で計算しました。`}>
+      <StatRow>
+        <StatTile label={`${a.ev.days}日間`} value={formatYen(own.totalYen)} />
+        <StatTile label="1kmあたり" value={`${own.perKmYen.toFixed(1)}円`} />
+      </StatRow>
+      <LinkRow
+        title="あなたの充電代をくわしく"
+        description="家・外の内訳、ガソリン車との比較、安くする方法"
+        onPress={() => router.push('/result/charge-cost')}
+      />
+    </Section>
+  );
+}
+
+/** 2. 電池の残り（グラフ） */
+export function BatterySection({ result, ownEv }: { result: AnalysisResult; ownEv: boolean }) {
+  const { ev } = result.analysis;
+  const homeCharge = result.evInput.homeEnv !== 'none';
+  const lowest = (season: typeof ev.normal) =>
+    season.days.reduce((m, d) => (d.minSoc < m.minSoc ? d : m), season.days[0]);
+  const low = lowest(ev.normal);
+  const lowWinter = lowest(ev.winter);
+
+  return (
+    <Section
+      title="電池の残り"
+      description={`${ev.ev.name}${ownEv ? 'で' : 'だったら'}、運転すると減り、家で充電すると増えます。`}>
+      <SocChart
+        start={jstMidnight(ev.normal.days[0].dayStart)}
+        days={ev.days}
+        normal={ev.normal.trace}
+        winter={ev.winter.trace}
+      />
+      {/* グラフの大事な数字は、文字でも出す（色だけで伝えない） */}
+      <StatRow>
+        <StatTile label="いちばん少ないとき" value={`${Math.round(low.minSoc)}%`} note={formatShortDate(low.dayStart)} />
+        <StatTile label="冬なら" value={`${Math.round(lowWinter.minSoc)}%`} note={formatShortDate(lowWinter.dayStart)} />
+      </StatRow>
+      {ev.winter.minSoc < SAFE_SOC || ev.normal.publicCharges > 0 ? (
+        <InfoBox tone="warn" title="安心ラインを下回りそうな日があります">
+          そうなる前に、外で充電する計算にしています（{SAFE_SOC}%から80%まで）。
+        </InfoBox>
       ) : null}
-      <ThemedText type="bold" style={{ marginTop: Spacing.two }}>
-        詳しく見る
+      <ThemedText type="note" color="sub">
+        電池は{FULL_SOC}%まで充電する想定です。
+        {homeCharge ? `家に1時間以上止めたら、${HOME_CHARGE_KW}kWで充電します。` : '家で充電できない設定なので、外で充電するまで減り続けます。'}
+        冬は走れる距離が{Math.round(PARAMS.winterFactor * 100)}%になるとして計算しています。
       </ThemedText>
-      <LinkRow title="あなたの1週間で見るEVの違い" description="待っていた時間、ガソリンスタンド、メンテナンス" onPress={() => router.push('/result/difference')} />
-      <LinkRow title="7日間の電池の残り" description="日ごとのグラフ、冬の場合" onPress={() => router.push('/result/battery')} />
-      <LinkRow title="通った道の充電スポット" description={`近くに ${a.spots.length}か所`} onPress={() => router.push('/result/spots')} />
-      <LinkRow title="費用・補助金と相談メモ" description="燃料・電気代、国と市町の補助金" onPress={() => router.push('/result/cost')} />
-    </View>
+    </Section>
+  );
+}
+
+/** 3. EVの違い（ガソリンスタンド・メンテナンス） */
+export function DifferenceSection({ result }: { result: AnalysisResult }) {
+  const { ev } = result.analysis;
+  const visits = ev.cost.gasLiters / TANK_L;
+  const homeCharge = result.evInput.homeEnv !== 'none';
+  return (
+    <Section title="あなたの毎日で見るEVの違い">
+      <ThemedText type="bold">ガソリンスタンドに行く回数（{ev.days}日間）</ThemedText>
+      <StatRow>
+        <StatTile
+          label="今の車"
+          value={`約${visits < 1 ? visits.toFixed(1) : Math.round(visits)}回`}
+          note={`ガソリン 約${Math.round(ev.cost.gasLiters)}L`}
+        />
+        <StatTile
+          label="EVなら"
+          value={homeCharge ? '0回' : '外で充電'}
+          note={homeCharge ? '家で充電' : `約${formatTimes(ev.publicCount.normal)}`}
+        />
+      </StatRow>
+      <ThemedText type="note" color="sub">
+        タンク{TANK_L}Lを満タンにするとして計算した目安です。
+      </ThemedText>
+      <ThemedText type="bold" style={{ marginTop: Spacing.two }}>
+        メンテナンス
+      </ThemedText>
+      <ThemedText>エンジンオイルの交換がいらないなど、手入れが少なくなります。</ThemedText>
+      <ThemedText type="note" color="sub">
+        販売店の声：「維持費が約2割安い」
+      </ThemedText>
+    </Section>
+  );
+}
+
+/** 4. ほかの結果（別の画面） */
+export function MoreResultsSection({ result, ownEv }: { result: AnalysisResult; ownEv: boolean }) {
+  return (
+    <Section title="ほかの結果">
+      <LinkRow
+        title="通った道の充電スポット"
+        description={`近くに ${result.analysis.spots.length}か所`}
+        onPress={() => router.push('/result/spots')}
+      />
+      {!ownEv ? (
+        <LinkRow
+          title="費用・補助金と相談メモ"
+          description="燃料・電気代、国と市町の補助金"
+          onPress={() => router.push('/result/cost')}
+        />
+      ) : null}
+    </Section>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    gap: Spacing.two,
-  },
   verdict: {
     flexDirection: 'row',
     alignItems: 'center',

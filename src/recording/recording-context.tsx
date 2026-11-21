@@ -1,9 +1,9 @@
 import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
 
-import { DAY_MS, type Clock } from '@/lib/clock';
+import type { Clock } from '@/lib/clock';
 import { jstDayNumber } from '@/lib/format';
 
-import { getRecordingEngine, RECORDING_DAYS, type RecordingSnapshot } from './engine';
+import { getRecordingEngine, type RecordingSnapshot } from './engine';
 
 const engine = getRecordingEngine();
 
@@ -32,23 +32,21 @@ export function useNow(clock: Clock): number {
   return useSyncExternalStore(clock.subscribe, get, get);
 }
 
-export type RecordingStatus = 'notStarted' | 'recording' | 'finished' | 'stopped';
+export type RecordingStatus = 'notStarted' | 'recording' | 'stopped';
 
 export type RecordingProgress = {
   status: RecordingStatus;
-  /** 今日が何日目か（1〜7）。始めていなければ 0 */
-  day: number;
-  /** 結果が出るまであと何日 */
-  daysLeft: number;
+  /** 記録した日数（始めた日から今日まで、または止めた日まで）。始めていなければ 0 */
+  days: number;
+  /** 結果に入れる最後の時刻（今、止めた時刻、テストデータの終わりのうち早いもの） */
+  until: number;
 };
 
-/** 時計から「何日目」「あと○日」を計算する */
+/** 記録の状態と、記録した日数 */
 export function getProgress(snapshot: RecordingSnapshot, now: number): RecordingProgress {
   const { startedAt, endsAt, stoppedAt } = snapshot;
-  if (startedAt == null || endsAt == null) return { status: 'notStarted', day: 0, daysLeft: RECORDING_DAYS };
-  if (stoppedAt != null) return { status: 'stopped', day: 0, daysLeft: 0 };
-  if (now >= endsAt) return { status: 'finished', day: RECORDING_DAYS, daysLeft: 0 };
-  const day = Math.min(RECORDING_DAYS, Math.max(1, jstDayNumber(now) - jstDayNumber(startedAt) + 1));
-  const daysLeft = Math.max(1, Math.ceil((endsAt - now) / DAY_MS));
-  return { status: 'recording', day, daysLeft };
+  if (startedAt == null) return { status: 'notStarted', days: 0, until: now };
+  const until = Math.min(now, stoppedAt ?? Infinity, endsAt != null ? endsAt - 1 : Infinity);
+  const days = Math.max(1, jstDayNumber(until) - jstDayNumber(startedAt) + 1);
+  return { status: stoppedAt != null ? 'stopped' : 'recording', days, until };
 }

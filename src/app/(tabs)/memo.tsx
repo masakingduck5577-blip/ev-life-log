@@ -1,15 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { formatTimes, perMonth } from '@/analysis/ev';
+import { formatTimes } from '@/analysis/ev';
 import { Button } from '@/components/button';
 import { Icon } from '@/components/icon';
 import { InfoBox } from '@/components/info-box';
 import { Screen, Section } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, MinTouch, Radius, Spacing } from '@/constants/theme';
-import { formatDate, formatDuration, formatKm, formatMan, formatYen } from '@/lib/format';
-import { RECORDING_DAYS } from '@/recording/engine';
+import { formatDate, formatKm, formatMan, formatYen } from '@/lib/format';
 import { useRecording } from '@/recording/recording-context';
 import { useAnalysis } from '@/recording/use-analysis';
 import { useSimulatorUrl } from '@/recording/use-simulator-url';
@@ -59,29 +58,28 @@ export default function MemoScreen() {
             EV相談メモ
           </ThemedText>
           <ThemedText type="note" color="sub">
-            {startedAt != null ? `${formatDate(startedAt)}から${RECORDING_DAYS}日間の記録` : ''}・位置や通った道は入っていません
+            {startedAt != null ? `${formatDate(startedAt)}から${ev.days}日間の記録` : ''}・位置や通った道は入っていません
           </ThemedText>
           <Line label={ownEv ? '乗っているEV' : '検討中のEV'} value={ev.ev.name} />
           {!ownEv ? <Line label="判定" value={ev.verdict.text} strong /> : null}
-          <Line label="1週間に走った距離" value={`${formatKm(a.carKm)}（運転 ${a.carTripCount}回・1年で約${formatNumberKm(ev.yearKm)}）`} />
+          <Line label={`${ev.days}日間に走った距離`} value={`${formatKm(a.carKm)}（運転 ${a.carTripCount}回・1年で約${formatNumberKm(ev.yearKm)}）`} />
           <Line
             label="電池の残り（いちばん少ないとき）"
             value={`ふだん ${Math.round(ev.normal.minSoc)}%・冬 ${Math.round(ev.winter.minSoc)}%`}
           />
           <Line label="自宅で充電" value={HOME_LABEL[settings.homeEnv]} />
           {settings.homeEnv === 'none' ? (
-            <Line label="外での充電" value={`週に約${formatTimes(ev.publicPerWeek.normal)}（冬は約${formatTimes(ev.publicPerWeek.winter)}）`} />
+            <Line label="外での充電" value={`${ev.days}日間で約${formatTimes(ev.publicCount.normal)}（冬は約${formatTimes(ev.publicCount.winter)}）`} />
           ) : null}
           {ownEv && result ? (
-            <Line label="あなたの充電代" value={`1か月 ${formatYen(result.own.monthYen)}（1kmあたり ${result.own.perKmYen.toFixed(1)}円）`} strong />
+            <Line label="あなたの充電代" value={`${ev.days}日間で ${formatYen(result.own.totalYen)}（1kmあたり ${result.own.perKmYen.toFixed(1)}円）`} strong />
           ) : (
             <Line
-              label="燃料代（1か月）"
-              value={`ガソリン ${formatYen(perMonth(ev.cost.gas))} → 電気 ${formatYen(perMonth(ev.cost.ev))}`}
+              label={`燃料代（${ev.days}日間）`}
+              value={`ガソリン ${formatYen(ev.cost.gas)} → 電気 ${formatYen(ev.cost.ev)}`}
               strong
             />
           )}
-          <Line label="止まって待った時間（1週間）" value={formatDuration(a.waitMin)} />
           {!ownEv ? (
             <Line label="国の補助金" value={`${formatMan(ev.ev.subsidy)}（2027年1月以降の登録は${formatMan(ev.ev.subsidy2027)}）`} />
           ) : null}
@@ -125,7 +123,7 @@ export default function MemoScreen() {
         ) : null}
         <Button label="Web版シミュレーターで詳しく見る" variant="secondary" onPress={() => void Linking.openURL(simUrl)} />
         <ThemedText type="note" color="sub">
-          お店に集計の結果（週の距離・充電の回数・費用）を送る機能は準備中です。送る前に同意の画面を出します。
+          お店に集計の結果（走った距離・充電の回数・費用）を送る機能は準備中です。送る前に同意の画面を出します。
         </ThemedText>
       </Section>
     </Screen>

@@ -7,7 +7,7 @@ import { BottomTabInset, Colors, MaxContentWidth, MinTouch, Radius, Spacing } fr
 import type { PlaybackSpeed } from '@/lib/clock';
 import { DAY_MS } from '@/lib/clock';
 import { formatDate, formatShortDate, formatTime, jstMidnight } from '@/lib/format';
-import { RECORDING_DAYS } from '@/recording/engine';
+import { TEST_DATA_DAYS } from '@/recording/engine';
 import {
   getProgress,
   useNow,
@@ -42,7 +42,7 @@ export function DevPanel() {
   if (!snapshot.ready || snapshot.mode !== 'test') return null;
   const progress = getProgress(snapshot, now);
   const scenario = getScenario(snapshot.scenarioId);
-  const dayStarts = Array.from({ length: RECORDING_DAYS }, (_, i) =>
+  const dayStarts = Array.from({ length: TEST_DATA_DAYS }, (_, i) =>
     snapshot.startedAt != null ? jstMidnight(snapshot.startedAt) + i * DAY_MS : 0,
   );
 
@@ -63,7 +63,7 @@ export function DevPanel() {
             テスト操作
           </ThemedText>
           <ThemedText type="note" color="sub" style={styles.headerTime} numberOfLines={1}>
-            {progress.status === 'finished' ? '記録の終わり' : `${formatShortDate(now)} ${formatTime(now)}`}
+            {snapshot.endsAt != null && now >= snapshot.endsAt ? 'テストデータの終わり' : `${formatShortDate(now)} ${formatTime(now)}`}
           </ThemedText>
           <ThemedText type="note" color="ev" style={styles.toggle}>
             {open ? '閉じる' : '開く'}
@@ -105,7 +105,7 @@ export function DevPanel() {
                   key={ms}
                   label={formatShortDate(ms).replace(/（.）/, '')}
                   a11yLabel={`${formatDate(ms)}の朝6時へ`}
-                  selected={progress.status === 'recording' && progress.day === i + 1}
+                  selected={progress.status === 'recording' && progress.days === i + 1}
                   onPress={() => void actions.jumpToDay(i + 1)}
                 />
               ))}

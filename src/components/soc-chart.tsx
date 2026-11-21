@@ -1,65 +1,128 @@
-import { StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { ScrollView, StyleSheet, View, type ScrollViewInstance } from 'react-native';
+import Svg, { Line, Polyline } from 'react-native-svg';
 
-import { SAFE_SOC } from '@/analysis/ev';
+import { SAFE_SOC, type SocPoint } from '@/analysis/ev';
 import { Colors, Spacing } from '@/constants/theme';
+import { DAY_MS } from '@/lib/clock';
+import { formatShortDate } from '@/lib/format';
 
 import { ThemedText } from './themed-text';
 
-export type SocDay = { label: string; normal: number; winter: number };
+/** グラフの高さ（0〜100%の部分） */
+const H = 180;
+const PAD_TOP = 10;
+/** 左の目盛りの幅 */
+const AXIS_W = 40;
+/** 一度に見せる日数（これより多いと横に送って見る） */
+const VISIBLE_DAYS = 7;
+const TICKS = [100, 50, SAFE_SOC, 0];
 
-const H = 150;
-/** 日付の文字の高さ（棒の下） */
-const LABEL_H = 26;
+type Props = {
+  /** 1日目の 0:00 */
+  start: number;
+  days: number;
+  normal: SocPoint[];
+  winter: SocPoint[];
+};
 
 /**
- * 7日間の電池の残り（その日でいちばん少ないとき）。ふだん と 冬 を並べる。
- * 数字も棒の上に書く（色だけで伝えない）。安心ライン（20%）に線を引く。
+ * 電池の残りの移り変わり（折れ線）。運転で下がり、家で充電すると上がる。
+ * ふだん（実線）と冬（点線）を重ね、安心ライン（20%）に線を引く。
+ * 日数が多いときは横に送って見る（最初は新しい日を見せる）。
  */
-export function SocChart({ days }: { days: SocDay[] }) {
+export function SocChart({ start, days, normal, winter }: Props) {
+  const [width, setWidth] = useState(0);
+  const scroll = useRef<ScrollViewInstance>(null);
+  const dayW = width > 0 ? (width - AXIS_W) / Math.min(days, VISIBLE_DAYS) : 0;
+  const plotW = dayW * days;
+  const x = (t: number) => ((t - start) / DAY_MS) * dayW;
+  const y = (soc: number) => PAD_TOP + (1 - Math.max(0, Math.min(100, soc)) / 100) * H;
+  const toPoints = (trace: SocPoint[]) => trace.map((p) => `${x(p.t).toFixed(1)},${y(p.soc).toFixed(1)}`).join(' ');
+  const minOf = (trace: SocPoint[]) => Math.round(Math.min(...trace.map((p) => p.soc)));
+
   return (
-    <View>
+    <View style={{ gap: Spacing.two }}>
       <View style={styles.legend}>
-        <Legend color={Colors.ev} text="ふだん" />
-        <Legend color={Colors.navy} text="冬" />
-        <View style={styles.legendItem}>
-          <View style={styles.legendLine} />
-          <ThemedText type="note" color="sub">
-            安心ライン {SAFE_SOC}%
-          </ThemedText>
-        </View>
+        <LegendLine color={Colors.ev} text="ふだん" width={3} />
+        <LegendLine color={Colors.navy} text="冬" dashed width={2} />
+        <LegendLine color={Colors.warn} text={`安心ライン ${SAFE_SOC}%`} dashed width={2} />
       </View>
-      <View style={styles.chart} accessible accessibilityLabel={days.map((d) => `${d.label} ふだん${Math.round(d.normal)}% 冬${Math.round(d.winter)}%`).join('、')}>
-        <View style={[styles.safeLine, { bottom: (SAFE_SOC / 100) * H + LABEL_H }]} />
-        {days.map((d) => (
-          <View key={d.label} style={styles.day}>
-            <View style={styles.bars}>
-              <Bar value={d.normal} color={Colors.ev} />
-              <Bar value={d.winter} color={Colors.navy} />
-            </View>
-            <ThemedText type="note" color="sub" style={styles.dayLabel}>
-              {d.label}
+
+      <View
+        style={styles.chartRow}
+        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        accessible
+        accessibilityLabel={`電池の残りのグラフ。いちばん少ないとき、ふだん${minOf(normal)}%、冬${minOf(winter)}%`}>
+        {/* 目盛り（%） */}
+        <View style={[styles.axis, { height: PAD_TOP + H + 30 }]}>
+          {TICKS.map((v) => (
+            <ThemedText
+              key={v}
+              type="note"
+              color={v === SAFE_SOC ? 'warn' : 'sub'}
+              style={[styles.tick, { top: y(v) - 10 }]}>
+              {v}%
             </ThemedText>
-          </View>
-        ))}
+          ))}
+        </View>
+
+        {dayW > 0 ? (
+          <ScrollView
+            ref={scroll}
+            horizontal
+            showsHorizontalScrollIndicator={days > VISIBLE_DAYS}
+            onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: false })}>
+            <View style={{ width: plotW }}>
+              <Svg width={plotW} height={PAD_TOP + H + 1}>
+                {/* 横の線（100%・50%・0%） */}
+                {[100, 50, 0].map((v) => (
+                  <Line key={v} x1={0} x2={plotW} y1={y(v)} y2={y(v)} stroke={Colors.line} strokeWidth={1} />
+                ))}
+                {/* 日の区切り */}
+                {Array.from({ length: days + 1 }, (_, i) => (
+                  <Line key={i} x1={i * dayW} x2={i * dayW} y1={PAD_TOP} y2={PAD_TOP + H} stroke={Colors.line} strokeWidth={1} />
+                ))}
+                {/* 安心ライン */}
+                <Line
+                  x1={0}
+                  x2={plotW}
+                  y1={y(SAFE_SOC)}
+                  y2={y(SAFE_SOC)}
+                  stroke={Colors.warn}
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                />
+                <Polyline points={toPoints(winter)} fill="none" stroke={Colors.navy} strokeWidth={2} strokeDasharray="5 4" strokeLinejoin="round" />
+                <Polyline points={toPoints(normal)} fill="none" stroke={Colors.ev} strokeWidth={3} strokeLinejoin="round" />
+              </Svg>
+              {/* 日付 */}
+              <View style={styles.dates}>
+                {Array.from({ length: days }, (_, i) => (
+                  <ThemedText key={i} type="note" color="sub" style={[styles.date, { width: dayW }]} numberOfLines={1}>
+                    {formatShortDate(start + i * DAY_MS + DAY_MS / 2).replace(/（.）/, '')}
+                  </ThemedText>
+                ))}
+              </View>
+            </View>
+          </ScrollView>
+        ) : null}
       </View>
+      {days > VISIBLE_DAYS ? (
+        <ThemedText type="note" color="sub">
+          グラフを横に動かすと、前の日も見られます。
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
 
-function Bar({ value, color }: { value: number; color: string }) {
-  const v = Math.max(0, Math.min(100, value));
-  return (
-    <View style={styles.barCol}>
-      <ThemedText style={styles.barValue}>{Math.round(v)}</ThemedText>
-      <View style={[styles.bar, { height: (v / 100) * H, backgroundColor: color }]} />
-    </View>
-  );
-}
-
-function Legend({ color, text }: { color: string; text: string }) {
+function LegendLine({ color, text, dashed, width }: { color: string; text: string; dashed?: boolean; width: number }) {
   return (
     <View style={styles.legendItem}>
-      <View style={[styles.legendBox, { backgroundColor: color }]} />
+      <Svg width={24} height={10}>
+        <Line x1={0} x2={24} y1={5} y2={5} stroke={color} strokeWidth={width} strokeDasharray={dashed ? '5 3' : undefined} />
+      </Svg>
       <ThemedText type="note" color="sub">
         {text}
       </ThemedText>
@@ -71,65 +134,42 @@ const styles = StyleSheet.create({
   legend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.three,
-    marginBottom: Spacing.two,
+    columnGap: Spacing.three,
+    rowGap: Spacing.one,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.one,
   },
-  legendBox: {
-    width: 14,
-    height: 14,
-    borderRadius: 3,
-  },
-  legendLine: {
-    width: 18,
-    borderTopWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: Colors.warn,
-  },
-  chart: {
+  chartRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingTop: 22,
+  },
+  axis: {
+    width: AXIS_W,
     position: 'relative',
   },
-  safeLine: {
+  tick: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    borderTopWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: Colors.warn,
+    right: Spacing.one,
+    lineHeight: 20,
   },
-  day: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  bars: {
+  dates: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 2,
-    height: H,
+    height: 30,
   },
-  barCol: {
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  barValue: {
-    fontSize: 14,
-    lineHeight: 18,
-    color: Colors.ink,
-  },
-  bar: {
-    width: 16,
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
-  },
-  dayLabel: {
-    marginTop: Spacing.one,
-    height: LABEL_H - Spacing.one,
+  date: {
+    textAlign: 'center',
+    lineHeight: 30,
   },
 });
+
+/** from〜to の分を切り出す（境目の残りも足して、線が途切れないようにする） */
+export function sliceTrace(trace: SocPoint[], from: number, to: number): SocPoint[] {
+  const before = [...trace].reverse().find((p) => p.t <= from);
+  const inside = trace.filter((p) => p.t > from && p.t < to);
+  const out: SocPoint[] = [{ t: from, soc: before?.soc ?? trace[0]?.soc ?? 0 }, ...inside];
+  const last = trace[trace.length - 1];
+  if (last && last.t >= to) out.push({ t: to, soc: out[out.length - 1].soc });
+  return out;
+}

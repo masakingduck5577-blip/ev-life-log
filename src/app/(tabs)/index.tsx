@@ -7,30 +7,22 @@ import { Icon } from '@/components/icon';
 import { InfoBox } from '@/components/info-box';
 import { TRIP_LABEL } from '@/components/labels';
 import { StatRow, StatTile } from '@/components/link-row';
-import { ResultSummary } from '@/components/result-summary';
+import {
+  BatterySection,
+  DifferenceSection,
+  EvVerdictSection,
+  MoreResultsSection,
+  OwnCostSection,
+} from '@/components/result-summary';
 import { RouteMap } from '@/components/route-map';
 import { Screen, Section } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Colors, MinTouch, Radius, Spacing } from '@/constants/theme';
-import {
-  dateKey,
-  formatDate,
-  formatDuration,
-  formatKm,
-  formatShortDate,
-  formatTime,
-  jstDayNumber,
-} from '@/lib/format';
-import { RECORDING_DAYS } from '@/recording/engine';
-import {
-  getProgress,
-  useNow,
-  useRecording,
-  useRecordingActions,
-} from '@/recording/recording-context';
+import { dateKey, formatDate, formatKm, formatShortDate, formatTime, jstDayNumber } from '@/lib/format';
+import { getProgress, useNow, useRecording, useRecordingActions } from '@/recording/recording-context';
 import { useAnalysis } from '@/recording/use-analysis';
 
-/** 記録タブ：3. 記録中（ホーム）・5. 結果・1日の記録への入口 */
+/** 記録タブ：EVだったらの結果 → 電池の残り → 記録の状態 → EVの違い → 1日の記録 */
 export default function RecordScreen() {
   const snapshot = useRecording();
   const actions = useRecordingActions();
@@ -38,15 +30,17 @@ export default function RecordScreen() {
   const progress = getProgress(snapshot, now);
   const result = useAnalysis();
   const openDevSettings = useHiddenTap(() => router.push('/dev'));
-  const { endsAt, answers, carType } = snapshot;
+  const { startedAt, answers, carType } = snapshot;
   const a = result?.analysis;
-  const finished = progress.status === 'finished' || progress.status === 'stopped';
+  const ownEv = carType === 'ownEv';
+  const recording = progress.status === 'recording';
   const today = a?.days.find((d) => jstDayNumber(d.dayStart) === jstDayNumber(now));
+  const hasCarTrips = !!a && a.carTripCount > 0;
 
   return (
     <Screen
       title="記録"
-      lead="1週間ふだん通りに過ごすと、車での移動を記録します。"
+      lead="ふだん通りに過ごすと、車での移動を記録して、EVだったらどうなるかを見せます。"
       onTitlePress={openDevSettings}>
       {!snapshot.ready ? (
         <Section title="記録中の状態">
@@ -58,45 +52,19 @@ export default function RecordScreen() {
         </Section>
       ) : (
         <>
-          {/* 3. 記録中 */}
-          <Section title={finished ? '1週間の記録が終わりました' : '記録中'}>
-            {!finished ? (
-              <View style={styles.status}>
-                <ThemedText color="sub">
-                  {formatDate(now)} {formatTime(now)} 現在
-                </ThemedText>
-                <View style={styles.bigRow}>
-                  <ThemedText>結果が出るまで あと</ThemedText>
-                  <ThemedText style={styles.big}>{progress.daysLeft}</ThemedText>
-                  <ThemedText>日</ThemedText>
-                </View>
-                {endsAt != null ? (
-                  <ThemedText type="note" color="sub">
-                    {formatDate(endsAt - 1)} の終わりまで記録します
-                  </ThemedText>
-                ) : null}
-              </View>
-            ) : (
-              <ThemedText color="sub">下の結果で、あなたの1週間がEVだったらを確かめられます。</ThemedText>
-            )}
-            {a ? (
-              <StatRow>
-                <StatTile label="走った距離" value={formatKm(a.carKm)} />
-                <StatTile label="運転の回数" value={`${a.carTripCount}回`} />
-                <StatTile label="止まって待った時間" value={formatDuration(a.waitMin)} />
-              </StatRow>
-            ) : null}
-            {snapshot.mode === 'device' && progress.status === 'recording' ? (
-              <Button label="記録を止める" variant="secondary" onPress={() => void actions.stopDeviceRecording()} />
-            ) : null}
-            {snapshot.error ? (
-              <InfoBox tone="warn" title="うまく動いていません">
-                {snapshot.error}
-              </InfoBox>
-            ) : null}
-          </Section>
+          {/* EVだったらの結果（いちばん上） */}
+          {result && hasCarTrips ? (
+            <>
+              {ownEv ? <OwnCostSection result={result} /> : <EvVerdictSection result={result} />}
+              <BatterySection result={result} ownEv={ownEv} />
+            </>
+          ) : (
+            <InfoBox title="車での移動が記録されると、ここに結果が出ます">
+              EVだったらどうなるか、電池の残りのグラフで見られます。
+            </InfoBox>
+          )}
 
-          {/* 本人に確かめること */}
+          {/* 本人に確かめること（結果に関わる） */}
           {a && a.needsAnswer.length > 0 ? (
             <InfoBox tone="warn" title={`確かめてほしい移動が${a.needsAnswer.length}件あります`}>
               <ThemedText>電車やバスだったかもしれない移動です。車だった移動だけを計算に入れます。</ThemedText>
@@ -131,8 +99,43 @@ export default function RecordScreen() {
             </InfoBox>
           ) : null}
 
-          {/* 今日の運転 */}
-          {!finished && today ? (
+          {/* 記録の状態 */}
+          <Section title={recording ? '記録中' : '記録を止めました'}>
+            <ThemedText color="sub">
+              {startedAt != null ? `${formatDate(startedAt)}から` : ''}
+              {progress.days}日間の記録
+              {recording ? `（${formatTime(now)} 現在）` : ''}
+            </ThemedText>
+            {a ? (
+              <StatRow>
+                <StatTile label="走った距離" value={formatKm(a.carKm)} />
+                <StatTile label="運転の回数" value={`${a.carTripCount}回`} />
+              </StatRow>
+            ) : null}
+            {recording ? (
+              <ThemedText type="note" color="sub">
+                止めるまで記録を続けます。記録した日が増えるほど、結果がたしかになります。
+              </ThemedText>
+            ) : null}
+            {snapshot.mode === 'device' && recording ? (
+              <Button label="記録を止める" variant="secondary" onPress={() => void actions.stopDeviceRecording()} />
+            ) : null}
+            {snapshot.error ? (
+              <InfoBox tone="warn" title="うまく動いていません">
+                {snapshot.error}
+              </InfoBox>
+            ) : null}
+          </Section>
+
+          {result && hasCarTrips ? (
+            <>
+              {!ownEv ? <DifferenceSection result={result} /> : null}
+              <MoreResultsSection result={result} ownEv={ownEv} />
+            </>
+          ) : null}
+
+          {/* 今日の移動 */}
+          {recording && today ? (
             <Section title="今日の移動">
               {today.trips.length === 0 ? (
                 <ThemedText color="sub">まだ移動していません。</ThemedText>
@@ -155,46 +158,44 @@ export default function RecordScreen() {
             </Section>
           ) : null}
 
-          {/* 5. 結果（記録中は途中経過） */}
-          {result && a && a.carTripCount > 0 ? (
-            <Section title={finished ? '結果：あなたの1週間がEVだったら' : '途中経過'}>
-              <ResultSummary result={result} ownEv={carType === 'ownEv'} partial={!finished} />
-            </Section>
-          ) : null}
-
-          {/* 1日の記録 */}
+          {/* 1日の記録（新しい日から） */}
           <Section title="1日の記録" description="日付を押すと、運転・地図・電池の残りを見られます。">
             <View role="list">
-              {(a?.days ?? []).map((d) => {
-                const isToday = progress.status === 'recording' && jstDayNumber(d.dayStart) === jstDayNumber(now);
-                const future = progress.status === 'recording' && d.dayStart > now;
-                const ask = d.trips.some((t) => t.needsAnswer);
-                return (
-                  <Pressable
-                    key={d.dayStart}
-                    role="listitem"
-                    disabled={future}
-                    aria-label={`${formatDate(d.dayStart)}の記録`}
-                    onPress={() => router.push({ pathname: '/day', params: { date: dateKey(d.dayStart) } })}
-                    style={({ pressed }) => [styles.day, isToday && styles.dayToday, pressed && { opacity: 0.7 }]}>
-                    <ThemedText type="bold" style={styles.dayDate}>
-                      {`${formatShortDate(d.dayStart)}${isToday ? ' 今日' : ''}`}
-                    </ThemedText>
-                    <ThemedText color={future ? 'sub' : 'ink'} style={styles.dayInfo}>
-                      {future ? 'まだ' : d.carTrips.length ? `車 ${d.carTrips.length}回・${formatKm(d.carKm)}` : '車の運転なし'}
-                    </ThemedText>
-                    {ask ? (
-                      <ThemedText type="note" color="warn">
-                        確認
+              {(a?.days ?? [])
+                .map((d, i) => ({ d, battery: a?.ev.normal.days[i] }))
+                .reverse()
+                .map(({ d, battery }) => {
+                  const isToday = recording && jstDayNumber(d.dayStart) === jstDayNumber(now);
+                  const ask = d.trips.some((t) => t.needsAnswer);
+                  return (
+                    <Pressable
+                      key={d.dayStart}
+                      role="listitem"
+                      aria-label={`${formatDate(d.dayStart)}の記録`}
+                      onPress={() => router.push({ pathname: '/day', params: { date: dateKey(d.dayStart) } })}
+                      style={({ pressed }) => [styles.day, isToday && styles.dayToday, pressed && { opacity: 0.7 }]}>
+                      <ThemedText type="bold" style={styles.dayDate}>
+                        {`${formatShortDate(d.dayStart)}${isToday ? ' 今日' : ''}`}
                       </ThemedText>
-                    ) : null}
-                    {!future ? <Icon sf="chevron.right" md="chevron_right" size={18} color={Colors.sub} /> : null}
-                  </Pressable>
-                );
-              })}
-              {!a ? (
-                <ThemedText color="sub">{RECORDING_DAYS}日分の記録がここに並びます。</ThemedText>
-              ) : null}
+                      <View style={styles.dayInfo}>
+                        <ThemedText>
+                          {d.carTrips.length ? `車 ${d.carTrips.length}回・${formatKm(d.carKm)}` : '車の運転なし'}
+                        </ThemedText>
+                        {battery && d.carTrips.length ? (
+                          <ThemedText type="note" color="sub">
+                            電池 いちばん少ないとき {Math.round(battery.minSoc)}%
+                          </ThemedText>
+                        ) : null}
+                      </View>
+                      {ask ? (
+                        <ThemedText type="note" color="warn">
+                          確認
+                        </ThemedText>
+                      ) : null}
+                      <Icon sf="chevron.right" md="chevron_right" size={18} color={Colors.sub} />
+                    </Pressable>
+                  );
+                })}
             </View>
           </Section>
         </>
@@ -222,20 +223,6 @@ function useHiddenTap(onOpen: () => void) {
 }
 
 const styles = StyleSheet.create({
-  status: {
-    gap: Spacing.one,
-  },
-  bigRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: Spacing.one,
-  },
-  big: {
-    fontSize: 40,
-    lineHeight: 48,
-    fontWeight: 700,
-    color: Colors.ev,
-  },
   row2: {
     flexDirection: 'row',
     gap: Spacing.two,
@@ -259,8 +246,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
-    minHeight: MinTouch + 4,
+    minHeight: MinTouch + 12,
     paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
     borderBottomWidth: 1,
     borderColor: Colors.line,
   },
@@ -269,7 +257,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   dayDate: {
-    width: 120,
+    width: 110,
   },
   dayInfo: {
     flex: 1,

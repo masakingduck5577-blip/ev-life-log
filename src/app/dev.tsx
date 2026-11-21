@@ -36,7 +36,7 @@ export default function DevSettingsScreen() {
             />
             <Choice
               title="テストデータで試す"
-              description="宇都宮市周辺の架空の1週間を流します。早送りもできます。スマホの記録は消えません。"
+              description="宇都宮市周辺の架空の7日間を流します。早送りもできます。スマホの記録は消えません。"
               selected={mode === 'test'}
               onPress={() => void actions.setMode('test')}
             />

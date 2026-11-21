@@ -1,5 +1,5 @@
 /**
- * 1週間の記録の分析（仮）。位置の点の列 → 移動・止まった場所・1日ごとのまとめ・EVの計算。
+ * 記録の分析（仮）。記録した日数は何日でもよい。位置の点の列 → 移動・止まった場所・1日ごとのまとめ・EVの計算。
  */
 
 import { CHARGERS, EVS, type Charger } from '@/data/simulator';
@@ -7,13 +7,10 @@ import { DAY_MS } from '@/lib/clock';
 import { jstMidnight } from '@/lib/format';
 import type { LocationPoint } from '@/location/source';
 
-import { calcEv, perMonth, type EvInput, type EvResult } from './ev';
+import { calcEv, type EvInput, type EvResult } from './ev';
 import { distanceM, nearBox, type LatLng } from './geo';
 import { detectStops, detectTrips, estimateHome, type Stop, type Trip } from './trips';
 
-/** 待っていた時間とみなす停車（お迎えなど）：車で来て車で出た・歩いていない・家ではない・5〜30分 */
-const WAIT_MIN = 5;
-const WAIT_MAX = 30;
 /** 充電スポットに止まった：スポットから150m以内に15分以上 */
 const CHARGER_STOP_M = 150;
 const CHARGER_STOP_MIN = 15;
@@ -38,8 +35,6 @@ export type DayInfo = {
   trips: Trip[];
   carTrips: Trip[];
   carKm: number;
-  waitMin: number;
-  waits: Stop[];
   stops: Stop[];
 };
 
@@ -50,7 +45,6 @@ export type Analysis = {
   days: DayInfo[];
   carKm: number;
   carTripCount: number;
-  waitMin: number;
   needsAnswer: Trip[];
   chargerStops: ChargerStop[];
   spots: SpotNearRoute[];
@@ -62,38 +56,26 @@ export function analyze(
   options: { startedAt: number; days: number; until: number; evInput: EvInput; answers: Answers },
 ): Analysis {
   const { startedAt, days, until, evInput, answers } = options;
-  const weekStart = jstMidnight(startedAt);
+  const periodStart = jstMidnight(startedAt);
   const home = answers.homeConfirmed === false ? null : estimateHome(points);
   const trips = detectTrips(points, answers.trips ?? {});
   const stops = detectStops(points, trips, home, until);
   const carTrips = trips.filter((t) => t.kind === 'car');
 
-  // 充電スポットに止まっていた時間は、待ち時間に数えない（充電していたかもしれないため）
   const chargerStops = findChargerStops(stops);
-  const atCharger = new Set(chargerStops.map((c) => c.stop.id));
-  const isWait = (s: Stop) =>
-    s.byCar &&
-    !s.walked &&
-    !s.atHome &&
-    !atCharger.has(s.id) &&
-    s.durationMin >= WAIT_MIN &&
-    s.durationMin <= WAIT_MAX;
 
   const dayInfos: DayInfo[] = Array.from({ length: days }, (_, i) => {
-    const from = weekStart + i * DAY_MS;
+    const from = periodStart + i * DAY_MS;
     const to = from + DAY_MS;
     const inDay = (t: number) => t >= from && t < to;
     const dTrips = trips.filter((t) => inDay(t.start));
     const dCar = dTrips.filter((t) => t.kind === 'car');
     const dStops = stops.filter((s) => inDay(s.start));
-    const waits = dStops.filter(isWait);
     return {
       dayStart: from,
       trips: dTrips,
       carTrips: dCar,
       carKm: dCar.reduce((s, t) => s + t.distanceKm, 0),
-      waitMin: waits.reduce((s, w) => s + w.durationMin, 0),
-      waits,
       stops: dStops,
     };
   });
@@ -105,11 +87,10 @@ export function analyze(
     days: dayInfos,
     carKm: carTrips.reduce((s, t) => s + t.distanceKm, 0),
     carTripCount: carTrips.length,
-    waitMin: dayInfos.reduce((s, d) => s + d.waitMin, 0),
     needsAnswer: trips.filter((t) => t.needsAnswer),
     chargerStops,
     spots: spotsNearRoute(carTrips),
-    ev: calcEv(evInput, trips, stops, weekStart, days),
+    ev: calcEv(evInput, trips, stops, periodStart, days, until),
   };
 }
 
@@ -156,8 +137,8 @@ export function spotsNearRoute(carTrips: Trip[]): SpotNearRoute[] {
 /* ---------- EVに乗っている人：あなたの充電代（E3） ---------- */
 
 export type OwnChargeCost = {
-  weekYen: number;
-  monthYen: number;
+  /** 記録した日数の充電代 */
+  totalYen: number;
   perKmYen: number;
   homeYen: number;
   publicYen: number;
@@ -188,7 +169,7 @@ export function ownChargeCost(a: Analysis, input: EvInput, answers: Answers): Ow
     publicCount++;
     const kw = cs.charger.type === 'quick' ? Math.min(cs.charger.kw ?? 50, ev.quickKw) : Math.min(cs.charger.kw ?? 6, ev.acKw);
     // 入れた量の推定：止めていた時間 × 速さ。ただし、1回で入るのは電池の60%まで、
-    // 1週間で入れた量は、走って使った量まで（仮）
+    // 記録した日数で入れた量は、走って使った量まで（仮）
     const kwh = Math.max(0, Math.min((cs.stop.durationMin / 60) * kw, ev.batteryKwh * 0.6, used - publicKwh));
     publicKwh += kwh;
     if (ans.yen != null && ans.yen >= 0) {
@@ -201,11 +182,10 @@ export function ownChargeCost(a: Analysis, input: EvInput, answers: Answers): Ow
   // 残りは家で入れたと推定する（家で充電できない人は、外の単価で）
   const restKwh = Math.max(0, used - publicKwh);
   const homeYen = input.homeEnv === 'none' ? restKwh * input.publicPrice : restKwh * input.homePrice;
-  const weekYen = homeYen + publicYen;
+  const totalYen = homeYen + publicYen;
   return {
-    weekYen,
-    monthYen: perMonth(weekYen),
-    perKmYen: a.carKm > 0 ? weekYen / a.carKm : 0,
+    totalYen,
+    perKmYen: a.carKm > 0 ? totalYen / a.carKm : 0,
     homeYen,
     publicYen,
     homeKwh: input.homeEnv === 'none' ? 0 : restKwh,

@@ -31,12 +31,12 @@ export default function SpotsScreen() {
   return (
     <Screen title="通った道の充電スポット" lead="車で通った道と行き先から500m以内にある充電スポットです。" back>
       <RouteMap
-        label="1週間に車で通った道と、近くの充電スポットの地図"
-        fitKey="week"
+        label="車で通った道と、近くの充電スポットの地図"
+        fitKey="all"
         height={320}
         paths={a.trips.filter((t) => t.kind === 'car').map((t) => ({ points: t.path, kind: 'car' as const }))}
         markers={[
-          ...spots.map((s) => chargerMarker(s.charger, `1週間に${s.passes}回近くを通った`)),
+          ...spots.map((s) => chargerMarker(s.charger, `${s.passes}回近くを通った`)),
           ...(a.home ? [{ id: 'home', kind: 'home' as const, lat: a.home.lat, lng: a.home.lng, title: '家' }] : []),
         ]}
       />

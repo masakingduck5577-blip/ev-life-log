@@ -2,7 +2,6 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
-import { perMonth } from '@/analysis/ev';
 import { Button } from '@/components/button';
 import { InfoBox } from '@/components/info-box';
 import { StatRow, StatTile } from '@/components/link-row';
@@ -44,13 +43,13 @@ export default function CostScreen() {
     <Screen title="費用・補助金" lead={`${ev.ev.name}と、${ev.gasName}（燃費 ${ev.gasKmPerL}km/L）を比べています。`} back>
       <Section title="燃料・電気代">
         <StatRow>
-          <StatTile label="ガソリン代（1週間）" value={formatYen(cost.gas)} note={`1か月 ${formatYen(perMonth(cost.gas))}`} />
-          <StatTile label="電気代（1週間）" value={formatYen(cost.ev)} note={`1か月 ${formatYen(perMonth(cost.ev))}`} />
+          <StatTile label={`ガソリン代（${ev.days}日間）`} value={formatYen(cost.gas)} />
+          <StatTile label={`電気代（${ev.days}日間）`} value={formatYen(cost.ev)} />
         </StatRow>
         <ThemedText type="heading" color={cost.gas >= cost.ev ? 'ev' : 'warn'}>
           {cost.gas >= cost.ev
-            ? `1か月で約${formatYen(perMonth(cost.gas - cost.ev))}安くなります`
-            : `1か月で約${formatYen(perMonth(cost.ev - cost.gas))}高くなります`}
+            ? `${ev.days}日間で約${formatYen(cost.gas - cost.ev)}安くなります`
+            : `${ev.days}日間で約${formatYen(cost.ev - cost.gas)}高くなります`}
         </ThemedText>
         <ThemedText type="note" color="sub">
           ガソリン {PARAMS.gasPrice}円/L（燃費はカタログ値の{Math.round(PARAMS.gasRealFactor * 100)}%）・家の電気 {input.homePrice}円/kWh・外の充電 {input.publicPrice}円/kWh で計算。

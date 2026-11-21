@@ -19,7 +19,6 @@ import {
   requestLocationPermission,
   type LocationPermission,
 } from '@/location/source';
-import { useRecording } from '@/recording/recording-context';
 
 const IS_WEB = Platform.OS === 'web';
 
@@ -39,14 +38,13 @@ const STEPS: { sf: SFSymbol; md: AndroidSymbol; title: string; body: string }[] 
   {
     sf: 'chart.bar',
     md: 'bar_chart',
-    title: '7日たつと結果が出る',
-    body: '1週間がEVだったら、毎日の電池の残り、通った道の充電スポット、費用の違いを見せます。',
+    title: '記録した日の分だけ、結果が出る',
+    body: 'EVだったら毎日の電池の残りはどうなるか、通った道の充電スポット、費用の違いを見せます。翌日・3日目・7日目にお知らせします。',
   },
 ];
 
 /** 1. はじめに：アプリの説明・記録のしかた・許可 */
 export default function WelcomeScreen() {
-  const { mode } = useRecording();
   const [location, setLocation] = useState<LocationPermission | null>(null);
   const [notification, setNotification] = useState<NotificationPermission | null>(null);
 
@@ -60,7 +58,7 @@ export default function WelcomeScreen() {
   return (
     <Screen
       title="EV Life Log"
-      lead="1週間ふだん通りに過ごすと、車での移動を記録して「あなたの1週間がEVだったら」を、あなたの数字で見せます。"
+      lead="ふだん通りに過ごすと、車での移動を記録して「あなたの毎日がEVだったら」を、あなたの数字で見せます。"
       footer={
         <>
           {!locationOk ? (
@@ -69,6 +67,14 @@ export default function WelcomeScreen() {
             </ThemedText>
           ) : null}
           <Button label="はじめる" onPress={() => router.push('/onboarding/setup')} />
+          <Button
+            label="テストデータで試す"
+            variant="secondary"
+            onPress={() => router.push({ pathname: '/onboarding/setup', params: { trial: '1' } })}
+          />
+          <ThemedText type="note" color="sub">
+            テストデータ：宇都宮市周辺の架空の7日間で、結果の見え方を試せます。位置の許可はいりません。
+          </ThemedText>
         </>
       }>
       <Section title="このアプリでわかること">
@@ -97,7 +103,7 @@ export default function WelcomeScreen() {
       <Section title="使う機能の許可">
         {IS_WEB ? (
           <InfoBox title="ブラウザではテストデータを使います">
-            本当の位置は使わず、宇都宮市周辺の架空の1週間で表示します。許可はいりません。
+            本当の位置は使わず、宇都宮市周辺の架空の7日間で表示します。許可はいりません。
           </InfoBox>
         ) : null}
 
@@ -130,10 +136,6 @@ export default function WelcomeScreen() {
               : null
           }
         />
-
-        {!IS_WEB && mode === 'test' ? (
-          <InfoBox>今はテストデータで試しているので、許可しなくても進めます。</InfoBox>
-        ) : null}
       </Section>
 
       <InfoBox title="登録はいりません。位置はスマホの外に送りません">

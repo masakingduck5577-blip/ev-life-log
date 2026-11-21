@@ -5,7 +5,6 @@ import { InfoBox } from '@/components/info-box';
 import { StatRow, StatTile } from '@/components/link-row';
 import { Screen, Section } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { perMonth } from '@/analysis/ev';
 import { formatYen } from '@/lib/format';
 import { useRecording } from '@/recording/recording-context';
 import { useAnalysis } from '@/recording/use-analysis';
@@ -26,14 +25,13 @@ export default function ChargeCostScreen() {
   const unanswered = a.chargerStops.filter((c) => answers.charges?.[c.stop.id] == null).length;
 
   return (
-    <Screen title="あなたの充電代" lead={`${a.ev.ev.name}で、1週間に${Math.round(a.carKm)}km走りました。`} back>
+    <Screen title="あなたの充電代" lead={`${a.ev.ev.name}で、記録した${a.ev.days}日間に${Math.round(a.carKm)}km走りました。`} back>
       <StatRow>
-        <StatTile label="1週間" value={formatYen(own.weekYen)} />
-        <StatTile label="1か月にすると" value={formatYen(own.monthYen)} />
+        <StatTile label={`${a.ev.days}日間`} value={formatYen(own.totalYen)} />
         <StatTile label="1kmあたり" value={`${own.perKmYen.toFixed(1)}円`} />
       </StatRow>
 
-      <Section title="家と外の内訳（1週間）">
+      <Section title="家と外の内訳">
         <StatRow>
           <StatTile label="家" value={formatYen(own.homeYen)} note={`約${own.homeKwh.toFixed(1)}kWh・${evInput.homePrice}円/kWh`} />
           <StatTile label="外" value={formatYen(own.publicYen)} note={`${own.publicCount}回・約${own.publicKwh.toFixed(1)}kWh`} />
@@ -49,15 +47,15 @@ export default function ChargeCostScreen() {
 
       <Section title="ガソリン車だった場合と比べると">
         <StatRow>
-          <StatTile label="ガソリン車（1か月）" value={formatYen(perMonth(own.gasYen))} note={a.ev.gasName} />
-          <StatTile label="あなたの充電代（1か月）" value={formatYen(own.monthYen)} />
+          <StatTile label={`ガソリン車（${a.ev.days}日間）`} value={formatYen(own.gasYen)} note={a.ev.gasName} />
+          <StatTile label={`あなたの充電代（${a.ev.days}日間）`} value={formatYen(own.totalYen)} />
         </StatRow>
       </Section>
 
       <Section title="もっと安くするなら">
-        {own.nightPlanYen != null && own.nightPlanYen < own.weekYen ? (
+        {own.nightPlanYen != null && own.nightPlanYen < own.totalYen ? (
           <ThemedText>
-            ・夜が安いプランにすると、1か月 約{formatYen(perMonth(own.weekYen - own.nightPlanYen))}安くなる見込みです（目安）。
+            ・夜が安いプランにすると、{a.ev.days}日間で約{formatYen(own.totalYen - own.nightPlanYen)}安くなる見込みです（目安）。
           </ThemedText>
         ) : null}
         {own.publicYen > 0 && evInput.homeEnv !== 'none' ? (

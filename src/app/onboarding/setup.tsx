@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 
@@ -31,6 +31,8 @@ const CAR_TYPES: { value: CarType; title: string; description: string }[] = [
 
 /** 2. はじめの入力：車の種類・住んでいる市区町村・燃費・自宅の充電 → 記録を始める */
 export default function SetupScreen() {
+  const { trial } = useLocalSearchParams<{ trial?: string }>();
+  const isTrial = trial === '1';
   const { settings, carType: savedCar } = useRecording();
   const actions = useRecordingActions();
   const [car, setCar] = useState<CarType>(savedCar ?? 'gas');
@@ -39,6 +41,8 @@ export default function SetupScreen() {
   const start = async () => {
     setBusy(true);
     try {
+      // 「テストデータで試す」から来たときはテストデータ、「はじめる」からはスマホの記録（ブラウザは常にテストデータ）
+      await actions.setMode(isTrial ? 'test' : 'device');
       await actions.completeOnboarding(car);
       router.replace('/');
     } finally {
@@ -51,7 +55,9 @@ export default function SetupScreen() {
       title="あなたの車と住まい"
       lead="計算に使います。分からないところはそのままで始められ、あとから設定で変えられます。"
       back
-      footer={<Button label="記録を始める" disabled={busy} onPress={() => void start()} />}>
+      footer={
+        <Button label={isTrial ? 'テストデータで試す' : '記録を始める'} disabled={busy} onPress={() => void start()} />
+      }>
       <View style={{ gap: Spacing.two }} role="radiogroup" aria-label="今乗っている車">
         <ThemedText type="heading">今乗っている車</ThemedText>
         {CAR_TYPES.map((c) => (
